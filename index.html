@@ -142,7 +142,11 @@ input[type=checkbox]{width:28px;height:28px;min-height:0;accent-color:var(--acce
 
 /* ---------- Karten (Leaflet) ---------- */
 .karte{background:var(--card2)}
-.karte-plan{flex:0 0 42%;min-height:220px}
+.karte-plan{flex:0 0 42%;min-height:220px;transition:flex-basis .25s ease,min-height .25s ease}
+/* Planen: Karte klappt beim Runterscrollen zu, damit die Liste Platz hat */
+#view-planen.karte-zu .karte-plan{flex-basis:0;min-height:0}
+.karte-auf-btn{flex:0 0 auto;width:100%;min-height:46px;border:0;border-bottom:1px solid var(--line);background:var(--card2);color:var(--text);font-weight:800;font-size:16px}
+.karte-auf-btn[hidden]{display:none}
 .karte-detail{height:260px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
 .karte-aus{display:grid;place-items:center;height:100%;padding:16px;text-align:center;color:var(--muted);font-weight:600}
 :root[data-dunkel="1"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
@@ -316,6 +320,7 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
   <!-- ===================== PLANEN ===================== -->
   <section class="view" id="view-planen">
     <div id="planKarte" class="karte karte-plan"></div>
+    <button type="button" class="karte-auf-btn" id="btnKarteAuf" hidden>🗺️ Karte einblenden</button>
     <div class="scroll sperrbar" id="planPanel"><div class="inhalt">
       <p class="klein">Start und Ziel suchen oder auf die Karte tippen. Punkte lassen sich verschieben.</p>
 
@@ -959,6 +964,34 @@ const plan = { start: null, ziel: null, vias: [], modus: 'schnell', tippen: 'via
 let planMarker = null, planLinien = null, wetterToken = 0;
 const koordText = p => `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
 const kurzName = s => String(s).split(',').slice(0, 2).join(',').trim();
+
+// Planen: Karte beim Runterscrollen zuklappen, oben wieder aufklappen
+function planKarteZuklappen(zu) {
+  const v = $('#view-planen');
+  if (v.classList.contains('karte-zu') === zu) return;
+  v.classList.toggle('karte-zu', zu);
+  $('#btnKarteAuf').hidden = !zu;
+  // Nach dem Aufklappen muss Leaflet die neue Größe kennen
+  if (!zu) setTimeout(() => { if (planKarte) try { planKarte.invalidateSize(); } catch (e) {} }, 280);
+}
+function karteZeigen() {
+  $('#planPanel').scrollTop = 0;
+  planKarteZuklappen(false);
+}
+function planScrollInit() {
+  const panel = $('#planPanel'), kartenEl = $('#planKarte');
+  panel.addEventListener('scroll', () => {
+    const v = $('#view-planen');
+    if (v.classList.contains('karte-zu')) {
+      if (panel.scrollTop <= 2) planKarteZuklappen(false); // ganz oben → Karte wieder da
+    } else {
+      // Nur zuklappen, wenn danach noch genug zu scrollen ist (sonst springt es hin und her)
+      const rest = panel.scrollHeight - panel.clientHeight;
+      if (panel.scrollTop > 60 && rest > kartenEl.offsetHeight + 80) planKarteZuklappen(true);
+    }
+  }, { passive: true });
+  $('#btnKarteAuf').addEventListener('click', karteZeigen);
+}
 
 function planKarteInit() {
   planKarte = karteErstellen('planKarte');
@@ -2764,7 +2797,7 @@ function ereignisseBinden() {
   $('#inStart').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sucheAdresse('start'); } });
   $('#inZiel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sucheAdresse('ziel'); } });
   $('#btnStandort').onclick = standortAlsStart;
-  $('#segTippen').onclick = e => { const b = e.target.closest('button'); if (!b) return; plan.tippen = b.dataset.v; $$('#segTippen button').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#segTippen').onclick = e => { const b = e.target.closest('button'); if (!b) return; plan.tippen = b.dataset.v; $$('#segTippen button').forEach(x => x.classList.toggle('on', x === b)); karteZeigen(); /* zum Antippen muss die Karte sichtbar sein */ };
   $('#segModus').onclick = e => { const b = e.target.closest('button'); if (!b) return; plan.modus = b.dataset.v; $$('#segModus button').forEach(x => x.classList.toggle('on', x === b)); };
   $('#viaListe').onclick = e => { const b = e.target.closest('button[data-i]'); if (!b) return; plan.vias.splice(+b.dataset.i, 1); plan.vias.forEach((v, i) => v.name = 'Zwischenstopp ' + (i + 1)); ergebnisVerwerfen(); renderPlanMarker(); };
   $('#btnBerechnen').onclick = berechneRoute;
@@ -2835,7 +2868,7 @@ async function init() {
   themeAnwenden();
   ansicht = einst.fahrAnsicht === 'navi' ? 'navi' : 'tacho';
   await datenLaden();
-  planKarteInit(); fahrKarteInit();
+  planKarteInit(); fahrKarteInit(); planScrollInit();
   if (typeof L === 'undefined') toast('Karte konnte nicht geladen werden (offline?). Gespeicherte Fahrten sind trotzdem da.', 6000);
   $('#hinweisUnsicher').hidden = !!window.isSecureContext;
   allesNeuZeichnen(); steuerungAnzeigen(); renderViaListe(); ansichtAnwenden();
