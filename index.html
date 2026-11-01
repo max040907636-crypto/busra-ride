@@ -1,0 +1,2347 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b2229">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kurvenbuch">
+<title>Kurvenbuch</title>
+<!-- Leaflet (Karte) per CDN – wenn offline, läuft die App ohne Karte weiter -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* =========================================================
+   FARBEN & GRUNDLAGEN
+   Hell = Standard, Dunkel per Systemeinstellung oder Umschalter.
+   Akzent: Warnwesten-Gelb (gut sichtbar bei Sonne).
+   ========================================================= */
+:root{
+  --bg:#eef1f4; --card:#ffffff; --card2:#f6f8fa; --input:#ffffff;
+  --text:#0f151b; --muted:#4a5562; --line:#c9d1d9;
+  --accent:#ffd400; --accent-text:#0f151b; --accent-line:#b39500;
+  --good:#11804a; --bad:#c62828; --warn:#a15c00; --info:#0b5cad;
+  --route:#c2185b; --track:#0b5cad;
+  --zahl:"Bahnschrift","DIN Alternate","DIN 1451","Roboto Condensed","Arial Narrow",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12171c; --card:#1b2229; --card2:#232c35; --input:#141a20;
+    --text:#f4f6f8; --muted:#a9b4bf; --line:#34404c;
+    --accent:#ffd400; --accent-text:#12171c; --accent-line:#ffd400;
+    --good:#3ddc84; --bad:#ff6b6b; --warn:#ffb84d; --info:#6cb4ff;
+    --route:#ff4f9a; --track:#ffd400;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12171c; --card:#1b2229; --card2:#232c35; --input:#141a20;
+  --text:#f4f6f8; --muted:#a9b4bf; --line:#34404c;
+  --accent:#ffd400; --accent-text:#12171c; --accent-line:#ffd400;
+  --good:#3ddc84; --bad:#ff6b6b; --warn:#ffb84d; --info:#6cb4ff;
+  --route:#ff4f9a; --track:#ffd400;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg);color:var(--text);
+  font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+h2{font-size:24px;margin:4px 0 8px}
+h3{font-size:19px;margin:0 0 8px}
+a{color:var(--info)}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--info);outline-offset:2px}
+
+/* ---------- Kopfzeile ---------- */
+.kopf{
+  display:flex;align-items:center;gap:8px;background:var(--card);
+  padding:6px 12px;padding-top:calc(6px + env(safe-area-inset-top));
+  border-bottom:1px solid var(--line);
+}
+.logo{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-family:var(--zahl);font-size:clamp(18px,5.4vw,24px);font-weight:700;letter-spacing:.2px}
+.logo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logo svg{width:32px;height:32px;flex:none}
+@media (max-width:400px){.kopf{gap:6px;padding-left:10px;padding-right:10px}.logo span{display:none}}
+.icon-btn{
+  min-width:56px;min-height:56px;border-radius:14px;border:2px solid var(--line);
+  background:var(--card2);color:var(--text);display:grid;place-items:center;font-size:22px;padding:0;
+}
+.icon-btn svg{width:26px;height:26px}
+.icon-btn.notfall{color:#fff;background:#c62828;border-color:#c62828;font-weight:800}
+
+/* ---------- Banner ---------- */
+.banner{padding:10px 14px;font-weight:700;display:flex;align-items:center;gap:10px}
+.banner.warn{background:var(--accent);color:var(--accent-text)}
+.banner.info{background:var(--info);color:#fff}
+.banner .btn{min-height:44px}
+
+/* ---------- Ansichten ---------- */
+main{flex:1;position:relative;overflow:hidden}
+.view{position:absolute;inset:0;display:none;flex-direction:column}
+.view.aktiv{display:flex}
+.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px 32px;flex:1}
+.inhalt{max-width:760px;margin:0 auto}
+
+/* ---------- Tab-Leiste ---------- */
+.tabs{display:grid;grid-template-columns:repeat(6,1fr);background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{min-height:64px;border:0;background:none;color:var(--muted);font-size:11.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;position:relative;padding:4px 2px}
+.tabs button svg{width:26px;height:26px}
+.tabs button.aktiv{color:var(--text)}
+.tabs button.aktiv::before{content:"";position:absolute;top:0;left:18%;right:18%;height:4px;background:var(--accent);border-radius:0 0 4px 4px}
+.tabs button.punkt::after{content:"";position:absolute;top:9px;left:calc(50% + 8px);width:11px;height:11px;border-radius:50%;background:var(--bad);border:2px solid var(--card)}
+
+/* ---------- Bedienelemente ---------- */
+.btn{
+  min-height:56px;padding:0 16px;border-radius:14px;border:2px solid var(--line);
+  background:var(--card2);color:var(--text);font-size:17px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center;
+}
+.btn.primary{background:var(--accent);border-color:var(--accent-line);color:var(--accent-text)}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.danger-outline{color:var(--bad);border-color:var(--bad)}
+.btn.block{width:100%;display:flex}
+.btn.gross{min-height:72px;font-size:21px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.row{display:flex;gap:8px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.mt{margin-top:10px}
+input,select,textarea{
+  min-height:56px;width:100%;padding:0 14px;border-radius:14px;border:2px solid var(--line);
+  background:var(--input);color:var(--text);font:inherit;font-size:17px;
+}
+textarea{padding:12px 14px;min-height:96px;resize:vertical}
+input[type=range]{padding:0;border:0;background:none;accent-color:var(--accent-line)}
+input[type=checkbox]{width:28px;height:28px;min-height:0;accent-color:var(--accent-line);flex:none}
+.check{display:flex;align-items:center;gap:12px;min-height:56px;font-weight:700}
+.lbl{display:block;font-weight:700;margin:14px 0 6px;font-size:15px}
+.klein{font-size:14px;color:var(--muted);margin:6px 0}
+.fehler{color:var(--bad);font-weight:700}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0}
+.seg{display:flex;border:2px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card2)}
+.seg button{flex:1;min-height:56px;border:0;background:none;color:var(--text);font-weight:700;font-size:15px;padding:0 6px}
+.seg button+button{border-left:2px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--accent-text)}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:700;background:var(--card2);border:1px solid var(--line);color:var(--muted)}
+.pill.good{color:var(--good);border-color:var(--good)}
+.pill.bad{color:var(--bad);border-color:var(--bad)}
+.pill.warn{color:var(--warn);border-color:var(--warn)}
+.warnbox{border-radius:14px;padding:12px;margin:10px 0;font-weight:600;border:2px solid}
+.warnbox.bad{border-color:var(--bad);color:var(--bad)}
+.warnbox.warn{border-color:var(--warn);color:var(--warn)}
+.warnbox.info{border-color:var(--info);color:var(--info)}
+.leer{padding:22px 14px;text-align:center;color:var(--muted);border:2px dashed var(--line);border-radius:18px;margin:12px 0}
+
+/* ---------- Karten (Leaflet) ---------- */
+.karte{background:var(--card2)}
+.karte-plan{flex:0 0 42%;min-height:220px}
+.karte-detail{height:260px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.karte-aus{display:grid;place-items:center;height:100%;padding:16px;text-align:center;color:var(--muted);font-weight:600}
+:root[data-dunkel="1"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
+:root[data-dunkel="1"] .leaflet-container{background:#1d2228}
+.leaflet-control-zoom a{width:44px!important;height:44px!important;line-height:44px!important;font-size:22px!important}
+.pin-wrap{background:none;border:0}
+.pin{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);font-size:15px;font-family:var(--zahl)}
+.pin-start{background:#11804a}.pin-ziel{background:#c62828}.pin-via{background:#0b5cad}.pin-top{background:#ffd400;color:#12171c}
+
+/* ---------- Planen ---------- */
+.treffer{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.treffer-btn{min-height:56px;text-align:left;padding:8px 12px;border-radius:12px;border:2px solid var(--line);background:var(--card2);color:var(--text);font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{display:flex;align-items:center;gap:6px;background:var(--card2);border:2px solid var(--line);border-radius:14px;padding-left:12px;font-weight:600;font-size:15px}
+.chip button{min-width:52px;min-height:52px;border:0;background:none;color:var(--bad);font-size:20px;font-weight:800}
+.route-karte{display:block;width:100%;text-align:left;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:12px 14px;margin:8px 0;color:var(--text);min-height:56px}
+.route-karte.on{border-color:var(--route);box-shadow:inset 6px 0 0 var(--route)}
+.route-zahlen{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--zahl);font-size:20px;margin-top:4px}
+.sterne{color:var(--warn);font-size:20px;letter-spacing:1px;white-space:nowrap}
+:root[data-dunkel="1"] .sterne{color:var(--accent)}
+.wetter{display:grid;gap:6px;margin:10px 0}
+.wetter div{background:var(--card2);border-radius:12px;padding:8px 12px;font-size:15px}
+.routen-eintrag{border-top:1px solid var(--line);padding:12px 0}
+.routen-eintrag:first-child{border-top:0}
+
+/* ---------- Fahren ---------- */
+#view-fahren{overflow-y:auto}
+.fahr-werte{background:var(--card);border-bottom:1px solid var(--line);padding:8px 12px 10px}
+.status-zeile{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;min-height:26px}
+.tempo{text-align:center;font-family:var(--zahl);font-weight:700;line-height:.95;font-variant-numeric:tabular-nums;font-size:min(24vw,12vh,140px);margin:2px 0}
+.tempo small{font-size:.22em;font-weight:600;color:var(--muted);margin-left:4px}
+.werte{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+.werte.zwei{grid-template-columns:repeat(2,1fr);margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.wert b{display:block;font-family:var(--zahl);font-size:clamp(24px,min(7.5vw,4.6vh),40px);font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.wert span{font-size:13px;color:var(--muted);font-weight:700}
+.karte-wrap{position:relative;flex:1 1 auto;min-height:70px;display:flex}
+.karte-wrap .karte{flex:1}
+.map-btn{position:absolute;right:10px;bottom:10px;z-index:900;min-width:56px;min-height:56px;border-radius:50%;border:2px solid var(--line);background:var(--card);color:var(--text);font-size:24px}
+.fahr-steuerung{background:var(--card);border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.gps-hinweis{font-size:13px;font-weight:700;color:var(--warn);text-align:center;line-height:1.3}
+/* Während der Fahrt: unbenutzbare Bedienelemente ausblenden, damit Pause/Stopp immer sichtbar sind */
+body.fahrsperre .fahr-steuerung .sperrbar,body.fahrsperre .gps-hinweis,body.aufnahme #fahrBike{display:none!important}
+@media (max-height:700px){.tempo{font-size:min(24vw,10.5vh,140px)}.fahr-werte{padding-top:4px;padding-bottom:6px}.werte.zwei{margin-top:4px;padding-top:4px}}
+.fahr-werte,.fahr-steuerung{flex:none}
+
+/* ---------- Fahrten / Statistik ---------- */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0}
+.stat-grid div{background:var(--card2);border-radius:12px;padding:10px 12px}
+.stat-grid b{display:block;font-family:var(--zahl);font-size:24px;line-height:1.15}
+.stat-grid span{font-size:13px;color:var(--muted);font-weight:600}
+@media (min-width:560px){.stat-grid.drei{grid-template-columns:repeat(3,1fr)}}
+.fahrt-btn{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin:8px 0;color:var(--text);min-height:56px}
+.fahrt-zahlen{display:flex;flex-wrap:wrap;gap:4px 14px;font-family:var(--zahl);font-size:18px;margin-top:4px}
+.topspeed{text-align:center;padding:8px 0 12px}
+.topspeed span{display:block;font-weight:700;color:var(--muted)}
+.topspeed b{display:block;font-family:var(--zahl);font-size:76px;line-height:1}
+.topspeed b small{font-size:24px;color:var(--muted)}
+.topspeed em{display:block;font-size:13px;color:var(--muted);font-style:normal;margin:4px 0}
+.vergleich .vgl-zeile{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.vergleich .vgl-zeile b{font-family:var(--zahl);font-size:20px}
+.vgl-diff{margin-top:10px;padding:10px 12px;border-radius:12px;font-weight:800;font-size:18px;color:#fff}
+.vgl-diff.good{background:#11804a}.vgl-diff.bad{background:#c62828}
+.chart{width:100%;height:200px;display:block;background:var(--card2);border-radius:12px}
+
+/* ---------- Garage ---------- */
+.bike.aktiv{border:2px solid var(--accent-line)}
+.wartung{border-top:1px solid var(--line);padding:10px 0}
+.balken{height:12px;border-radius:6px;background:var(--card2);overflow:hidden;border:1px solid var(--line);margin-top:6px}
+.balken i{display:block;height:100%;background:var(--good)}
+.balken i.warn{background:var(--warn)}.balken i.bad{background:var(--bad)}
+.txt-warn{color:var(--warn);font-weight:700}.txt-bad{color:var(--bad);font-weight:700}
+.wart-zeile{display:grid;grid-template-columns:1fr 1fr 56px;gap:6px;align-items:end;border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.wart-zeile .ganz{grid-column:1/-1}
+
+/* ---------- Notfall ---------- */
+.notfall div{padding:10px 0;border-bottom:1px solid var(--line)}
+.notfall span{display:block;font-size:14px;color:var(--muted);font-weight:700}
+.notfall b{font-size:22px}
+.notfall .riesig{font-family:var(--zahl);font-size:64px;line-height:1;color:var(--bad)}
+
+/* ---------- Overlays (Blatt, Dialog, Toast) ---------- */
+.sheet{position:fixed;inset:0;z-index:2000;background:var(--bg);display:flex;flex-direction:column}
+.sheet-kopf{display:flex;align-items:center;gap:10px;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--card);border-bottom:1px solid var(--line)}
+.sheet-kopf h2{margin:0;font-size:20px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.overlay{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px}
+.dlg{background:var(--card);color:var(--text);width:100%;max-width:520px;max-height:90vh;overflow:auto;border-radius:20px;padding:18px;border:1px solid var(--line)}
+.dlg h2{margin-top:0}
+.dlg-knoepfe{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.dlg-knoepfe .btn{flex:1 1 140px}
+@media (min-width:600px){.overlay{align-items:center}}
+.toast{position:fixed;left:50%;top:calc(76px + env(safe-area-inset-top));transform:translate(-50%,-20px);z-index:4000;background:var(--text);color:var(--bg);padding:12px 18px;border-radius:14px;font-weight:700;max-width:calc(100% - 32px);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center}
+.toast.zeigen{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- Tab-Beschriftung: kurz auf schmalen Handys ---------- */
+.tl-kurz{display:none}
+@media (max-width:480px){.tl-lang{display:none}.tl-kurz{display:inline}}
+
+/* ---------- Großer Start/Stopp-Knopf ---------- */
+.haupt-btn{flex:1;min-height:96px;border-radius:20px;font-family:var(--zahl);font-size:34px;font-weight:800;letter-spacing:1px;color:#fff}
+.haupt-btn.start{background:#11804a;border-color:#0b6638}
+.haupt-btn.stopp{background:#c62828;border-color:#9c1f1f}
+.pause-btn{flex:none;width:32%;min-height:96px;flex-direction:column;gap:0;font-size:28px;border-radius:20px}
+.pause-btn span{font-size:15px}
+
+/* ---------- Startorte & Touren ---------- */
+.ort-chip,.filter-chip{min-height:56px;padding:0 16px;border-radius:999px;border:2px solid var(--line);background:var(--card2);color:var(--text);font-weight:700;font-size:15px}
+.filter-chip.on{background:var(--accent);border-color:var(--accent-line);color:var(--accent-text)}
+.tour p{margin:8px 0}
+
+/* ---------- Fahrsperre: gesperrte Bereiche ---------- */
+body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
+
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ===================== KOPFZEILE ===================== -->
+<header class="kopf">
+  <div class="logo">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#ffd400"/><path d="M8 30c6 0 6-9 12-9s5-11 12-11" fill="none" stroke="#12171c" stroke-width="4" stroke-linecap="round"/></svg>
+    <span>Kurvenbuch</span>
+  </div>
+  <button class="icon-btn notfall" id="btnNotfall" aria-label="Notfall-Infos anzeigen" title="Notfall-Infos">✚</button>
+  <button class="icon-btn sperrbar" id="btnTheme" aria-label="Hell oder dunkel umschalten" title="Hell/Dunkel">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+  </button>
+  <button class="icon-btn" id="btnVollbild" aria-label="Vollbild" title="Vollbild">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</header>
+
+<div id="sperrBanner" class="banner warn" hidden>🔒 Fahrsperre: nur Pause und Stopp</div>
+<div id="pausenBanner" class="banner info" hidden><span class="grow">☕ 2 Stunden gefahren – Zeit für eine Pause!</span><button class="btn" id="btnPausenOk">OK</button></div>
+
+<main>
+  <!-- ===================== PLANEN ===================== -->
+  <section class="view" id="view-planen">
+    <div id="planKarte" class="karte karte-plan"></div>
+    <div class="scroll sperrbar" id="planPanel"><div class="inhalt">
+      <p class="klein">Start und Ziel suchen oder auf die Karte tippen. Punkte lassen sich verschieben.</p>
+
+      <label class="lbl" for="inStart">Start</label>
+      <div class="row"><input id="inStart" class="grow" placeholder="Adresse oder Ort" enterkeyhint="search" autocomplete="off"><button class="btn" id="btnStartSuchen">Suchen</button></div>
+      <button class="btn block mt" id="btnStandort">📍 Aktueller Standort als Start</button>
+      <div id="startortChips" class="chips"></div>
+      <button class="btn block mt" id="btnStartortSpeichern">⭐ Start als Startort speichern (z. B. Zuhause)</button>
+      <div id="trefferStart" class="treffer"></div>
+
+      <label class="lbl" for="inZiel">Ziel</label>
+      <div class="row"><input id="inZiel" class="grow" placeholder="Adresse oder Ort" enterkeyhint="search" autocomplete="off"><button class="btn" id="btnZielSuchen">Suchen</button></div>
+      <div id="trefferZiel" class="treffer"></div>
+
+      <label class="lbl">Tippen auf die Karte setzt</label>
+      <div class="seg" id="segTippen"><button data-v="start">Start</button><button data-v="via" class="on">Zwischenstopp</button><button data-v="ziel">Ziel</button></div>
+      <div id="viaListe" class="chips"></div>
+
+      <label class="lbl">Routen-Modus</label>
+      <div class="seg" id="segModus"><button data-v="schnell" class="on">Schnell</button><button data-v="kurvig">Kurvig</button><button data-v="ohneab">Ohne Autobahn</button></div>
+
+      <div class="row mt"><button class="btn primary grow gross" id="btnBerechnen">Route berechnen</button><button class="btn gross" id="btnPlanReset" aria-label="Planung zurücksetzen" title="Zurücksetzen">✕</button></div>
+
+      <div id="ergebnis"></div>
+
+      <div class="card">
+        <h3>Rundtour-Generator</h3>
+        <p class="klein">Startet und endet am Startpunkt. Nutzt den gewählten Routen-Modus.</p>
+        <label class="lbl" for="inRundKm">Gewünschte Länge: <span id="rundKmWert">100</span> km</label>
+        <input type="range" id="inRundKm" min="20" max="400" step="10" value="100">
+        <div class="row mt"><button class="btn primary grow" id="btnRundtour">Rundtour erstellen</button><button class="btn grow" id="btnWuerfeln" disabled>🎲 Neu würfeln</button></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><h3 class="grow" style="margin:0">Gespeicherte Routen</h3><label class="btn" for="gpxImport">GPX importieren</label></div>
+        <input type="file" id="gpxImport" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden>
+        <div id="routenListe" class="mt"></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ===================== TOUREN (Vorschläge) ===================== -->
+  <section class="view" id="view-touren"><div class="scroll sperrbar"><div class="inhalt">
+    <h2>Tourenvorschläge</h2>
+    <p class="klein">Runden im Bergischen Land und rund um Köln. Beim Antippen wird die Route frisch berechnet – immer ohne Autobahn.</p>
+    <label class="lbl" for="selTourStart">Losfahren ab</label>
+    <select id="selTourStart"></select>
+    <label class="check"><input type="checkbox" id="chkAnfahrt" checked> Anfahrt und Rückweg vom Startort einplanen</label>
+    <label class="lbl">Gegend</label>
+    <div class="chips" id="tourFilter"></div>
+    <div id="tourListe"></div>
+    <p class="klein">Längen sind Schätzungen; die echte Länge steht nach dem Berechnen da. Vor der Fahrt auf Sperrungen und Baustellen achten.
+    Ideen u. a. aus <a href="https://www.motorradundreisen.de/motorrad-tour/bergisches-land-7-talsperren-194-kilometern-dhuenn-sieg/8077/" target="_blank" rel="noopener">Motorrad &amp; Reisen</a> und
+    <a href="https://www.motorradonline.de/reise/mit-dem-motorrad-unterwegs-im-bergischen-land-die-letzte-ausfahrt-des-jahres/" target="_blank" rel="noopener">motorradonline</a>.</p>
+  </div></div></section>
+
+  <!-- ===================== FAHREN ===================== -->
+  <section class="view" id="view-fahren">
+    <div class="fahr-werte">
+      <div class="status-zeile">
+        <span id="gpsStatus" class="pill">GPS aus</span>
+        <span id="pauseStatus" class="pill warn" hidden>Auto-Pause</span>
+        <span id="wakeStatus" class="pill good" hidden>Bildschirm bleibt an</span>
+      </div>
+      <div class="tempo"><span id="wTempo">0</span><small>km/h</small></div>
+      <div class="werte">
+        <div class="wert"><b id="wZeit">0:00:00</b><span>Fahrzeit</span></div>
+        <div class="wert"><b id="wStrecke">0,0</b><span>km</span></div>
+        <div class="wert"><b id="wSchnitt">0</b><span>Ø km/h</span></div>
+      </div>
+      <div class="werte zwei" id="routeWerte" hidden>
+        <div class="wert"><b id="wRest">–</b><span id="wRestLabel">Rest km</span></div>
+        <div class="wert"><b id="wAnkunft">–</b><span>Ankunft ca.</span></div>
+      </div>
+      <div class="werte zwei" id="leanWerte" hidden>
+        <div class="wert"><b id="wLean">–</b><span>Schräglage (Schätzung)</span></div>
+        <div class="wert"><b id="wLeanMax">–</b><span>max. links / rechts</span></div>
+      </div>
+    </div>
+    <div class="karte-wrap">
+      <div id="fahrKarte" class="karte"></div>
+      <button class="map-btn" id="btnZentrieren" aria-label="Karte auf Position zentrieren" hidden>◎</button>
+    </div>
+    <div class="fahr-steuerung">
+      <div id="hinweisUnsicher" class="warnbox bad" hidden>GPS geht nur über https:// oder localhost – nicht beim Öffnen als Datei (file://). Zum Testen am PC: „Demo-Fahrt“.</div>
+      <div class="gps-hinweis">⚠️ App offen lassen, Bildschirm an – sonst stoppt das GPS. Ladekabel empfohlen.</div>
+      <div class="row sperrbar">
+        <select id="selRoute" class="grow" aria-label="Geplante Route für diese Fahrt"><option value="">Ohne geplante Route</option></select>
+        <button class="icon-btn" id="btnTeilen" aria-label="Standort teilen" title="Standort teilen">📤</button>
+        <button class="icon-btn" id="btnDemo" aria-label="Demo-Fahrt simulieren" title="Demo-Fahrt simulieren">🧪</button>
+      </div>
+      <div class="klein" id="fahrBike" style="text-align:center;margin:0"></div>
+      <div class="row">
+        <button class="btn pause-btn" id="btnPause" hidden>⏸<span>Pause</span></button>
+        <button class="btn haupt-btn start" id="btnHaupt">▶ START</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FAHRTEN ===================== -->
+  <section class="view" id="view-fahrten"><div class="scroll"><div class="inhalt" id="fahrtenInhalt"></div></div></section>
+
+  <!-- ===================== GARAGE ===================== -->
+  <section class="view" id="view-garage"><div class="scroll"><div class="inhalt" id="garageInhalt"></div></div></section>
+
+  <!-- ===================== EINSTELLUNGEN ===================== -->
+  <section class="view" id="view-einstellungen"><div class="scroll"><div class="inhalt">
+    <h2>Einstellungen</h2>
+
+    <div class="card">
+      <h3>Darstellung</h3>
+      <div class="seg" id="segTheme"><button data-v="auto">Automatisch</button><button data-v="light">Hell</button><button data-v="dark">Dunkel</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Startorte</h3>
+      <p class="klein">Orte, von denen du meistens losfährst (z. B. Zuhause). Der Standard-Startort wird beim Öffnen der App automatisch als Start gesetzt. Neue Startorte: im Tab „Planen“ Start setzen → „Start als Startort speichern“.</p>
+      <div id="startortListe"></div>
+    </div>
+
+    <div class="card">
+      <h3>Notfall-Infos</h3>
+      <p class="klein">Nur auf diesem Gerät gespeichert. Mit ✚ oben jederzeit mit einem Tipp aufrufbar.</p>
+      <label class="lbl" for="nfName">Dein Name</label><input id="nfName" autocomplete="name">
+      <label class="lbl" for="nfKontakt">Notfallkontakt (Name)</label><input id="nfKontakt">
+      <label class="lbl" for="nfTel">Telefon des Notfallkontakts</label><input id="nfTel" type="tel" inputmode="tel">
+      <label class="lbl" for="nfBlut">Blutgruppe</label>
+      <select id="nfBlut"><option value="">unbekannt</option><option>0+</option><option>0−</option><option>A+</option><option>A−</option><option>B+</option><option>B−</option><option>AB+</option><option>AB−</option></select>
+      <label class="lbl" for="nfMed">Allergien, Medikamente, Vorerkrankungen</label><textarea id="nfMed" rows="3"></textarea>
+      <div class="row mt"><button class="btn primary grow" id="btnNfSpeichern">Speichern</button><button class="btn grow" id="btnNfZeigen">Anzeigen</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Schräglage <span class="pill warn">experimentell</span></h3>
+      <p class="klein">Nur mit fester Handyhalterung sinnvoll. Nur Schätzwert, kein Messgerät. Keine Grenzen austesten.</p>
+      <label class="check"><input type="checkbox" id="chkLean"> In der Fahransicht anzeigen</label>
+      <div class="row"><button class="btn grow" id="btnLeanAn">Sensor aktivieren</button><button class="btn grow" id="btnLeanKal">Kalibrieren</button></div>
+      <p class="klein">Zum Kalibrieren das Motorrad gerade hinstellen (Handy in der Halterung). Aktuell: <b id="leanLive">–</b></p>
+    </div>
+
+    <div class="card">
+      <h3>So klappt das GPS</h3>
+      <p class="klein">GPS funktioniert nur, wenn die Seite über https:// oder localhost läuft. Beim Aufzeichnen muss die App im Vordergrund bleiben und der Bildschirm an sein – sonst pausiert der Browser das GPS. Ein Ladekabel ist empfohlen. Alle Daten bleiben nur auf diesem Gerät.</p>
+    </div>
+
+    <div class="card">
+      <h3>Daten &amp; Backup</h3>
+      <p class="klein">Alles liegt nur lokal in diesem Browser. Mach ab und zu ein Backup.</p>
+      <div class="row wrap"><button class="btn grow" id="btnBackup">Backup speichern</button><label class="btn grow" for="backupImport">Backup laden</label></div>
+      <input type="file" id="backupImport" accept=".json,application/json" hidden>
+      <button class="btn danger-outline block mt" id="btnAllesLoeschen">Alle Daten löschen</button>
+    </div>
+
+    <div class="card">
+      <h3>Datenquellen</h3>
+      <p class="klein">Karte: © OpenStreetMap-Mitwirkende · Routing: OSRM (Demo-Server, nur leichte Nutzung) · Adresssuche: Nominatim · Wetter: Open-Meteo. Kein Konto, keine Werbung, kein Tracking.</p>
+    </div>
+  </div></div></section>
+</main>
+
+<!-- ===================== TAB-LEISTE ===================== -->
+<nav class="tabs sperrbar" aria-label="Hauptbereiche">
+  <button data-tab="planen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Planen</button>
+  <button data-tab="touren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 6h11l3 2.5L16 11H5z"/><path d="M19 13H9l-3 2.5L9 18h10z"/></svg>Touren</button>
+  <button data-tab="fahren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 4-5"/><circle cx="12" cy="16" r="1.5" fill="currentColor"/></svg>Fahren</button>
+  <button data-tab="fahrten"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20c2-6 6-2 7-8s5-6 7-8"/><circle cx="5" cy="20" r="1.5" fill="currentColor"/><circle cx="19" cy="4" r="1.5" fill="currentColor"/></svg>Fahrten</button>
+  <button data-tab="garage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 10 12 4l9 6v10H3z"/><path d="M7 20v-6h10v6"/></svg>Garage</button>
+  <button data-tab="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="tl-lang">Einstellungen</span><span class="tl-kurz">Optionen</span></button>
+</nav>
+
+<!-- ===================== BLATT (Details, Formulare) ===================== -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-kopf"><button class="icon-btn" id="sheetZurueck" aria-label="Zurück">←</button><h2 id="sheetTitel"></h2></div>
+  <div class="scroll"><div class="inhalt" id="sheetInhalt"></div></div>
+</div>
+
+<!-- ===================== DIALOG ===================== -->
+<div id="dialog" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitel">
+  <div class="dlg"><h2 id="dlgTitel"></h2><div id="dlgText"></div><div class="dlg-knoepfe" id="dlgKnoepfe"></div></div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   KURVENBUCH – Motorrad-App in einer Datei
+   ---------------------------------------------------------------------
+   Aufbau:
+    1) Konstanten & Hilfsfunktionen
+    2) Uhr (echte Zeit oder beschleunigte Demo-Zeit)
+    3) Speicher (IndexedDB, mit RAM-Notlösung)
+    4) Oberfläche: Toast, Dialog, Blatt, Tabs, Theme, Vollbild
+    5) Karten (Leaflet + OpenStreetMap)
+    6) Online-Dienste: OSRM, Nominatim, Open-Meteo
+    7) Planen (Route, Kurvig, Rundtour, Speichern)
+   7b) Startorte & Tourenvorschläge
+    8) GPX Import/Export
+    9) Fahren (GPS-Aufzeichnung, Auto-Pause, Fahrsperre, Wake Lock)
+   10) Demo-Fahrt (Fake-GPS)
+   11) Auswertung & geplante vs. echte Zeit
+   12) Fahrten-Verlauf & Statistik
+   13) Garage (Motorräder, Wartung, Reichweite)
+   14) Einstellungen, Notfall, Schräglage, Backup
+   15) Start
+   ---------------------------------------------------------------------
+   Datenmodell:
+   Route  {id, name, erstellt, modus, waypoints:[{lat,lon,name}],
+           geometry:[[lat,lon]...], distance(m), duration(s), kurv(°/km), sterne}
+   Fahrt  {id, name, demo, start, ende, distance(m), fahrMs, gesamtMs,
+           maxSpeed(km/h), maxSpeedPos:[lat,lon], schnitt(km/h), hm,
+           segmente:[[{lat,lon,t,s,a}]], plan:{routeId,name,duration,distance}|null,
+           bikeId, leanL, leanR}
+   Bike   {id, name, km, tank(l), verbrauch(l/100km),
+           wartung:[{id,name,intervall(km),zuletzt(km)}]}
+   ===================================================================== */
+
+/* ===================== 1) KONSTANTEN & HILFSFUNKTIONEN ===================== */
+
+// Öffentlicher OSRM-Demo-Server: NUR für leichte Nutzung gedacht (ca. max. 1 Anfrage
+// pro Sekunde, ohne Garantie). Für mehr Nutzung einen eigenen OSRM-Server betreiben
+// (z. B. per Docker) und die Adresse hier austauschen.
+const OSRM_URL = 'https://router.project-osrm.org';
+// Nominatim: max. 1 Anfrage pro Sekunde, nur auf Knopfdruck (keine Live-Vorschläge).
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
+// Open-Meteo: kostenlos, ohne API-Key.
+const WETTER_URL = 'https://api.open-meteo.com/v1/forecast';
+// OSM-Kacheln: Nutzungsregeln von openstreetmap.org beachten (Quellenangabe Pflicht).
+const KACHEL_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+const TXT_UNSICHER = 'GPS geht nur über https:// oder localhost – nicht beim Öffnen als Datei (file://).';
+const ZWEI_STUNDEN = 2 * 3600000;
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const klon = o => JSON.parse(JSON.stringify(o));
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+const zahl = (n, d = 1) => Number(n || 0).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const zahlLesen = s => { const n = parseFloat(String(s ?? '').replace(',', '.')); return isFinite(n) ? n : 0; };
+const fmtKm = m => zahl((m || 0) / 1000, (m || 0) < 100000 ? 1 : 0) + ' km';
+// Stoppuhr-Format h:mm:ss
+function fmtUhr(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(s / 3600) + ':' + String(Math.floor(s % 3600 / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+// Dauer kurz: "45 min" oder "1:05 h"
+function fmtDauer(ms) {
+  const min = Math.round(Math.max(0, ms) / 60000);
+  return min < 60 ? min + ' min' : Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0') + ' h';
+}
+const fmtDatum = ts => new Date(ts).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+const fmtZeit = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const rad = d => d * Math.PI / 180, grad = r => r * 180 / Math.PI;
+const ll = a => ({ lat: a[0], lon: a[1] }); // [lat,lon] → {lat,lon}
+
+// Entfernung zweier Punkte in Metern (Haversine-Formel)
+function distanz(a, b) {
+  const R = 6371000, dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Richtung von a nach b in Grad (0 = Norden)
+function peilung(a, b) {
+  const y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon));
+  return (grad(Math.atan2(y, x)) + 360) % 360;
+}
+// Punkt, der von p aus in Richtung "brg" nach "km" Kilometern liegt
+function zielpunkt(p, brg, km) {
+  const d = km / 6371, b = rad(brg), la = rad(p.lat), lo = rad(p.lon);
+  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+  const lo2 = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+  return { lat: grad(la2), lon: ((grad(lo2) + 540) % 360) - 180 };
+}
+// Aufsummierte Länge entlang einer Linie (für Restdistanz)
+function kumuliert(geo) {
+  const c = [0];
+  for (let i = 1; i < geo.length; i++) c.push(c[i - 1] + distanz(ll(geo[i - 1]), ll(geo[i])));
+  return c;
+}
+// Kurvigkeit = Summe der Richtungsänderungen in Grad pro km.
+// Sehr kurze Teilstücke (< 15 m) werden zusammengefasst, damit kleine Zacken nicht zählen.
+// Wenden (> 150°) werden ignoriert (entstehen z. B. an Zwischenpunkten).
+function kurvigkeit(geo) {
+  if (!geo || geo.length < 3) return 0;
+  const pts = [ll(geo[0])];
+  let laenge = 0;
+  for (let i = 1; i < geo.length; i++) {
+    const p = ll(geo[i]), d = distanz(pts[pts.length - 1], p);
+    if (d >= 15) { pts.push(p); laenge += d; }
+  }
+  if (laenge < 500) return 0;
+  let summe = 0, vorher = null;
+  for (let i = 1; i < pts.length; i++) {
+    const h = peilung(pts[i - 1], pts[i]);
+    if (vorher !== null) { let d = Math.abs(h - vorher); if (d > 180) d = 360 - d; if (d < 150) summe += d; }
+    vorher = h;
+  }
+  return summe / (laenge / 1000);
+}
+// Grobe Einteilung in 1–5 Sterne (Erfahrungswerte, keine Wissenschaft)
+const sterne = g => g < 15 ? 1 : g < 35 ? 2 : g < 60 ? 3 : g < 100 ? 4 : 5;
+const sterneText = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+// Montag 0:00 der aktuellen Woche
+function wochenStart() { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x.getTime(); }
+const farbe = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const dateiName = s => String(s).replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) || 'export';
+
+/* ===================== 2) UHR ===================== */
+// Normal = echte Zeit. Bei der Demo-Fahrt läuft die Zeit schneller (z. B. 10x),
+// damit man eine ganze Fahrt in ca. 1–2 Minuten testen kann.
+const uhr = { demo: null };
+function jetzt() {
+  return uhr.demo ? uhr.demo.virtStart + (Date.now() - uhr.demo.realStart) * uhr.demo.faktor : Date.now();
+}
+
+/* ===================== 3) SPEICHER (IndexedDB) ===================== */
+// Alle Zugriffe mit try/catch. Klappt IndexedDB nicht (z. B. privater Modus),
+// wird im Arbeitsspeicher gespeichert und eine Warnung angezeigt.
+const Speicher = (() => {
+  const STORES = ['routes', 'rides', 'bikes', 'kv'];
+  const ram = {}; STORES.forEach(s => ram[s] = new Map());
+  let dbPromise = null, gewarnt = false;
+  function warnen() {
+    if (gewarnt) return; gewarnt = true;
+    setTimeout(() => toast('Lokaler Speicher nicht verfügbar – Daten gehen beim Schließen verloren.', 6000), 600);
+  }
+  function oeffnen() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise(res => {
+      let fertig = false;
+      const ende = db => { if (fertig) return; fertig = true; if (!db) warnen(); res(db); };
+      setTimeout(() => ende(null), 4000);
+      try {
+        const rq = indexedDB.open('kurvenbuch', 1);
+        rq.onupgradeneeded = () => {
+          const db = rq.result;
+          ['routes', 'rides', 'bikes'].forEach(n => { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, { keyPath: 'id' }); });
+          if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        };
+        rq.onsuccess = () => ende(rq.result);
+        rq.onerror = () => ende(null);
+        rq.onblocked = () => ende(null);
+      } catch (e) { ende(null); }
+    });
+    return dbPromise;
+  }
+  async function aktion(store, modus, fn) {
+    const db = await oeffnen();
+    if (!db) throw new Error('IndexedDB nicht verfügbar');
+    return new Promise((res, rej) => {
+      try {
+        const tx = db.transaction(store, modus);
+        const rq = fn(tx.objectStore(store));
+        let erg;
+        rq.onsuccess = () => { erg = rq.result; };
+        tx.oncomplete = () => res(erg);
+        tx.onerror = () => rej(tx.error);
+        tx.onabort = () => rej(tx.error || new Error('Abgebrochen'));
+      } catch (e) { rej(e); }
+    });
+  }
+  return {
+    async alle(store) { try { return (await aktion(store, 'readonly', s => s.getAll())) || []; } catch (e) { warnen(); return [...ram[store].values()]; } },
+    async hole(store, key) { try { return await aktion(store, 'readonly', s => s.get(key)); } catch (e) { warnen(); return ram[store].get(key); } },
+    async setze(store, wert, key) {
+      ram[store].set(store === 'kv' ? key : wert.id, wert);
+      try { await aktion(store, 'readwrite', s => store === 'kv' ? s.put(wert, key) : s.put(wert)); } catch (e) { warnen(); }
+    },
+    async loesche(store, key) { ram[store].delete(key); try { await aktion(store, 'readwrite', s => s.delete(key)); } catch (e) { warnen(); } },
+    async leeren(store) { ram[store].clear(); try { await aktion(store, 'readwrite', s => s.clear()); } catch (e) { warnen(); } }
+  };
+})();
+
+// Zwischenspeicher im Programm (wird beim Start aus IndexedDB geladen)
+const cache = { routes: [], rides: [], bikes: [] };
+const STANDARD_EINST = { theme: 'auto', aktivesBike: null, schraeglage: false, leanOffset: 0, startorte: [], standardStart: null, notfall: { name: '', kontakt: '', tel: '', blut: '', med: '' } };
+// Gelesene Einstellungen mit Standardwerten zusammenführen (auch für ältere Backups)
+function einstAusDaten(e) {
+  const x = { ...klon(STANDARD_EINST), ...(e || {}) };
+  x.notfall = { ...STANDARD_EINST.notfall, ...((e && e.notfall) || {}) };
+  x.startorte = Array.isArray(x.startorte) ? x.startorte.filter(o => o && o.id && isFinite(o.lat) && isFinite(o.lon)) : [];
+  if (!x.startorte.some(o => o.id === x.standardStart)) x.standardStart = x.startorte[0] ? x.startorte[0].id : null;
+  return x;
+}
+let einst = klon(STANDARD_EINST);
+const einstSpeichern = () => Speicher.setze('kv', einst, 'einstellungen');
+
+/* ===================== 4) OBERFLÄCHE ===================== */
+let toastTimer = null;
+function toast(text, ms = 3500) {
+  const t = $('#toast'); if (!t) return;
+  t.textContent = text; t.classList.add('zeigen');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('zeigen'), ms);
+}
+
+// Eigener Dialog mit großen Knöpfen. Mehrere Dialoge werden nacheinander gezeigt.
+let dialogKette = Promise.resolve();
+function dialog(opt) {
+  const p = dialogKette.then(() => dialogZeigen(opt));
+  dialogKette = p.catch(() => {});
+  return p;
+}
+function dialogZeigen({ titel, html = '', knoepfe = [{ text: 'OK', wert: true, art: 'primary' }] }) {
+  return new Promise(res => {
+    const o = $('#dialog');
+    $('#dlgTitel').textContent = titel;
+    $('#dlgText').innerHTML = html;
+    const box = $('#dlgKnoepfe'); box.innerHTML = '';
+    knoepfe.forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'btn ' + (k.art || '');
+      b.textContent = k.text;
+      b.onclick = () => { const w = typeof k.wert === 'function' ? k.wert() : k.wert; o.hidden = true; res(w); };
+      box.appendChild(b);
+    });
+    o.hidden = false;
+    const feld = $('#dlgEingabe'); if (feld) { feld.focus(); feld.select(); }
+  });
+}
+const frage = (titel, text, ja = 'Ja', art = 'primary') =>
+  dialog({ titel, html: `<p>${text}</p>`, knoepfe: [{ text: 'Abbrechen', wert: false }, { text: ja, wert: true, art }] });
+const eingabe = (titel, label, wert = '') =>
+  dialog({
+    titel, html: `<label class="lbl" for="dlgEingabe">${esc(label)}</label><input id="dlgEingabe" value="${esc(wert)}" maxlength="80">`,
+    knoepfe: [{ text: 'Abbrechen', wert: null }, { text: 'Speichern', art: 'primary', wert: () => $('#dlgEingabe').value }]
+  });
+
+// Vollbild-Blatt für Details und Formulare
+function sheetOeffnen(titel, html) {
+  $('#sheetTitel').textContent = titel;
+  $('#sheetInhalt').innerHTML = html;
+  $('#sheet').hidden = false;
+  $('#sheet .scroll').scrollTop = 0;
+}
+function sheetSchliessen() {
+  $('#sheet').hidden = true;
+  if (detailKarte) { try { detailKarte.remove(); } catch (e) {} detailKarte = null; }
+  $('#sheetInhalt').innerHTML = '';
+}
+
+// Tabs
+let aktuellerTab = 'planen';
+function zeigeTab(name) {
+  if (fahrsperre && name !== 'fahren') return;
+  aktuellerTab = name;
+  $$('.view').forEach(v => v.classList.toggle('aktiv', v.id === 'view-' + name));
+  $$('.tabs button').forEach(b => b.classList.toggle('aktiv', b.dataset.tab === name));
+  if (name === 'fahrten') renderFahrten();
+  if (name === 'garage') renderGarage();
+  if (name === 'touren') renderTouren();
+  if (name === 'fahren') { renderRoutenAuswahl(); fahrBikeAnzeigen(); }
+  setTimeout(kartenAktualisieren, 60);
+}
+function kartenAktualisieren() { [planKarte, fahrKarte, detailKarte].forEach(k => { if (k) try { k.invalidateSize(); } catch (e) {} }); }
+
+// Hell/Dunkel
+const mq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+function istDunkel() { return einst.theme === 'dark' || (einst.theme === 'auto' && !!mq && mq.matches); }
+function themeAnwenden() {
+  const root = document.documentElement;
+  if (einst.theme === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', einst.theme);
+  root.dataset.dunkel = istDunkel() ? '1' : '0';
+  const meta = $('meta[name="theme-color"]'); if (meta) meta.content = istDunkel() ? '#1b2229' : '#ffffff';
+  $$('#segTheme button').forEach(b => b.classList.toggle('on', b.dataset.v === einst.theme));
+  if (planKarte) zeichneRouten(false);
+  if (fahrKarte && trackLinie) { trackLinie.setStyle({ color: farbe('--track') }); }
+}
+if (mq) { try { mq.addEventListener('change', themeAnwenden); } catch (e) { try { mq.addListener(themeAnwenden); } catch (e2) {} } }
+
+// Vollbild (Fullscreen API) mit Hinweis fürs iPhone
+function vollbild() {
+  const d = document, el = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement) { try { (d.exitFullscreen || d.webkitExitFullscreen).call(d); } catch (e) {} return; }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return iphoneHinweis();
+  try { const p = req.call(el); if (p && p.catch) p.catch(iphoneHinweis); } catch (e) { iphoneHinweis(); }
+}
+function iphoneHinweis() {
+  dialog({ titel: 'Vollbild', html: '<p>Dein Browser erlaubt hier kein Vollbild (z. B. auf dem iPhone).</p><p><b>Über Teilen → „Zum Home-Bildschirm hinzufügen“</b> startet die App im Vollbild.</p>' });
+}
+document.addEventListener('fullscreenchange', () => setTimeout(kartenAktualisieren, 200));
+document.addEventListener('webkitfullscreenchange', () => setTimeout(kartenAktualisieren, 200));
+
+// Datei herunterladen (GPX, Backup)
+function herunterladen(name, inhalt, typ) {
+  try {
+    const url = URL.createObjectURL(new Blob([inhalt], { type: typ }));
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  } catch (e) { toast('Download fehlgeschlagen: ' + e.message); }
+}
+function dateiLesen(datei) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Datei konnte nicht gelesen werden.')); r.readAsText(datei); });
+}
+
+/* ===================== 5) KARTEN ===================== */
+let planKarte = null, fahrKarte = null, detailKarte = null;
+function karteErstellen(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  if (typeof L === 'undefined') {
+    el.innerHTML = '<div class="karte-aus">Karte nicht verfügbar (offline?).<br>Alles andere funktioniert trotzdem.</div>';
+    return null;
+  }
+  try {
+    const k = L.map(el, { zoomControl: true }).setView([51.16, 10.45], 6);
+    L.tileLayer(KACHEL_URL, { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende' }).addTo(k);
+    return k;
+  } catch (e) {
+    el.innerHTML = '<div class="karte-aus">Karte konnte nicht geladen werden.</div>';
+    return null;
+  }
+}
+function pinIcon(text, klasse) {
+  return L.divIcon({ className: 'pin-wrap', html: `<div class="pin ${klasse}">${esc(text)}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] });
+}
+
+/* ===================== 6) ONLINE-DIENSTE ===================== */
+// JSON holen mit Zeitlimit und verständlichen Fehlermeldungen
+async function holeJSON(url, ms = 12000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    let j = null; try { j = await r.json(); } catch (e) { /* keine JSON-Antwort */ }
+    if (!r.ok) { const err = new Error((j && (j.message || j.code)) || ('Dienst-Fehler (HTTP ' + r.status + ')')); err.status = r.status; err.daten = j; throw err; }
+    if (j === null) throw new Error('Ungültige Antwort vom Dienst.');
+    return j;
+  } catch (e) {
+    if (e.status) throw e;
+    if (e.name === 'AbortError') throw new Error('Zeitüberschreitung – der Dienst antwortet nicht.');
+    if (!navigator.onLine) throw new Error('Keine Internetverbindung.');
+    throw new Error(e.message === 'Ungültige Antwort vom Dienst.' ? e.message : 'Dienst nicht erreichbar.');
+  } finally { clearTimeout(timer); }
+}
+// Drossel: hält einen Mindestabstand zwischen Anfragen ein
+function drossel(abstand) {
+  let naechste = 0;
+  return async () => { const n = Date.now(); const w = Math.max(0, naechste - n); naechste = Math.max(n, naechste) + abstand; if (w) await sleep(w); };
+}
+const warteOSRM = drossel(1100), warteNominatim = drossel(1100);
+
+// Route von OSRM holen
+async function osrm(punkte, { alternativen = false, ohneAutobahn = false } = {}) {
+  await warteOSRM();
+  const coords = punkte.map(p => p.lon.toFixed(6) + ',' + p.lat.toFixed(6)).join(';');
+  let url = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  // Alternativen liefert OSRM nur bei genau 2 Punkten (ohne Zwischenstopps)
+  if (alternativen && punkte.length === 2) url += '&alternatives=true';
+  if (ohneAutobahn) url += '&exclude=motorway';
+  let d;
+  try { d = await holeJSON(url, 15000); }
+  catch (e) {
+    if (e.daten && e.daten.code === 'NoRoute') throw new Error('Keine Route gefunden.');
+    e.message = 'Routing: ' + e.message; throw e;
+  }
+  if (!d || d.code !== 'Ok' || !Array.isArray(d.routes) || !d.routes.length) {
+    throw new Error(d && d.code === 'NoRoute' ? 'Keine Route gefunden.' : 'Routing-Fehler: ' + ((d && (d.message || d.code)) || 'unbekannt'));
+  }
+  return d.routes.map(r => {
+    const geo = r.geometry.coordinates.map(c => [c[1], c[0]]);
+    const k = kurvigkeit(geo);
+    return { geometry: geo, distance: r.distance, duration: r.duration, kurv: k, sterne: sterne(k) };
+  });
+}
+// Wie osrm(), aber: kennt der Server "exclude=motorway" nicht, nochmal ohne
+async function osrmSicher(punkte, opt) {
+  try { return await osrm(punkte, opt); }
+  catch (e) {
+    if (opt && opt.ohneAutobahn && e.status === 400) {
+      toast('Autobahn-Ausschluss vom Server gerade nicht möglich – Route mit Autobahn.', 5000);
+      return osrm(punkte, { ...opt, ohneAutobahn: false });
+    }
+    throw e;
+  }
+}
+// Adresse suchen (Nominatim)
+async function adresseSuchen(q) {
+  await warteNominatim();
+  return holeJSON(`${NOMINATIM_URL}/search?format=jsonv2&limit=5&accept-language=de&q=${encodeURIComponent(q)}`, 10000);
+}
+// Wetter (Open-Meteo), 10 Minuten zwischengespeichert
+const wetterCache = new Map();
+async function wetter(p) {
+  const key = p.lat.toFixed(2) + ',' + p.lon.toFixed(2);
+  const c = wetterCache.get(key);
+  if (c && Date.now() - c.t < 600000) return c.v;
+  const d = await holeJSON(`${WETTER_URL}?latitude=${p.lat.toFixed(4)}&longitude=${p.lon.toFixed(4)}&current=temperature_2m,wind_speed_10m&hourly=precipitation_probability&forecast_days=2&timezone=auto&wind_speed_unit=kmh`, 10000);
+  if (!d.current) throw new Error('Keine Wetterdaten.');
+  const stunde = String(d.current.time || '').slice(0, 13);
+  const i = d.hourly && Array.isArray(d.hourly.time) ? d.hourly.time.findIndex(t => String(t).slice(0, 13) === stunde) : -1;
+  const v = { temp: d.current.temperature_2m, wind: d.current.wind_speed_10m, regen: i >= 0 ? d.hourly.precipitation_probability[i] : null };
+  wetterCache.set(key, { t: Date.now(), v });
+  return v;
+}
+
+/* ===================== 7) PLANEN ===================== */
+const plan = { start: null, ziel: null, vias: [], modus: 'schnell', tippen: 'via', ergebnisse: [], gewaehlt: 0, rundKm: 100 };
+let planMarker = null, planLinien = null, wetterToken = 0;
+const koordText = p => `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
+const kurzName = s => String(s).split(',').slice(0, 2).join(',').trim();
+
+function planKarteInit() {
+  planKarte = karteErstellen('planKarte');
+  if (!planKarte) return;
+  planMarker = L.layerGroup().addTo(planKarte);
+  planLinien = L.layerGroup().addTo(planKarte);
+  planKarte.on('click', e => kartenTipp(e.latlng));
+}
+function kartenTipp(latlng) {
+  if (fahrsperre) return;
+  const p = { lat: latlng.lat, lon: latlng.lng, name: koordText({ lat: latlng.lat, lon: latlng.lng }) };
+  if (plan.tippen === 'start') { plan.start = p; $('#inStart').value = p.name; }
+  else if (plan.tippen === 'ziel') { plan.ziel = p; $('#inZiel').value = p.name; }
+  else {
+    if (plan.vias.length >= 10) return toast('Maximal 10 Zwischenstopps.');
+    p.name = 'Zwischenstopp ' + (plan.vias.length + 1);
+    plan.vias.push(p);
+  }
+  ergebnisVerwerfen(); renderPlanMarker();
+}
+function renderPlanMarker() {
+  renderViaListe();
+  if (!planKarte) return;
+  planMarker.clearLayers();
+  const setze = (p, txt, kl, nachZiehen) => {
+    const m = L.marker([p.lat, p.lon], { icon: pinIcon(txt, kl), draggable: true, keyboard: false }).addTo(planMarker);
+    m.on('dragend', () => { const q = m.getLatLng(); p.lat = q.lat; p.lon = q.lng; if (nachZiehen) nachZiehen(); ergebnisVerwerfen(); renderPlanMarker(); });
+  };
+  if (plan.start) setze(plan.start, 'S', 'pin-start', () => { plan.start.name = koordText(plan.start); $('#inStart').value = plan.start.name; });
+  plan.vias.forEach((v, i) => setze(v, String(i + 1), 'pin-via'));
+  if (plan.ziel) setze(plan.ziel, 'Z', 'pin-ziel', () => { plan.ziel.name = koordText(plan.ziel); $('#inZiel').value = plan.ziel.name; });
+}
+function renderViaListe() {
+  const el = $('#viaListe');
+  el.innerHTML = plan.vias.map((v, i) => `<span class="chip">${i + 1}. Zwischenstopp<button data-i="${i}" aria-label="Zwischenstopp ${i + 1} entfernen">✕</button></span>`).join('');
+}
+function ergebnisVerwerfen() {
+  plan.ergebnisse = []; plan.gewaehlt = 0;
+  $('#btnWuerfeln').disabled = true;
+  renderErgebnis(); zeichneRouten(false);
+}
+function planZuruecksetzen() {
+  plan.start = null; plan.ziel = null; plan.vias = [];
+  $('#inStart').value = ''; $('#inZiel').value = '';
+  $('#trefferStart').innerHTML = ''; $('#trefferZiel').innerHTML = '';
+  ergebnisVerwerfen(); renderPlanMarker();
+}
+
+// Adresssuche – nur auf Knopfdruck
+async function sucheAdresse(feld) {
+  const input = $(feld === 'start' ? '#inStart' : '#inZiel');
+  const box = $(feld === 'start' ? '#trefferStart' : '#trefferZiel');
+  const btn = $(feld === 'start' ? '#btnStartSuchen' : '#btnZielSuchen');
+  const q = input.value.trim();
+  if (q.length < 3) return toast('Bitte mindestens 3 Zeichen eingeben.');
+  btn.disabled = true; box.innerHTML = '<p class="klein">Suche läuft …</p>';
+  try {
+    const d = await adresseSuchen(q);
+    if (!Array.isArray(d) || !d.length) { box.innerHTML = '<p class="klein">Nichts gefunden. Anders schreiben oder auf die Karte tippen.</p>'; return; }
+    box.innerHTML = '';
+    d.forEach(t => {
+      const b = document.createElement('button');
+      b.className = 'treffer-btn'; b.textContent = t.display_name;
+      b.onclick = () => {
+        const p = { lat: +t.lat, lon: +t.lon, name: kurzName(t.display_name) };
+        if (!isFinite(p.lat) || !isFinite(p.lon)) return;
+        plan[feld] = p; input.value = p.name; box.innerHTML = '';
+        ergebnisVerwerfen(); renderPlanMarker();
+        if (planKarte) planKarte.setView([p.lat, p.lon], 12);
+      };
+      box.appendChild(b);
+    });
+  } catch (e) { box.innerHTML = `<p class="fehler">Suche fehlgeschlagen: ${esc(e.message)}</p>`; }
+  finally { btn.disabled = false; }
+}
+
+// Aktuelle Position einmalig holen
+function aktuellePosition() {
+  return new Promise((res, rej) => {
+    if (!window.isSecureContext) return rej(new Error(TXT_UNSICHER));
+    if (!('geolocation' in navigator)) return rej(new Error('Dein Browser unterstützt keine Standortbestimmung.'));
+    navigator.geolocation.getCurrentPosition(
+      p => { letztePosition = { lat: p.coords.latitude, lon: p.coords.longitude, t: jetzt() }; res(letztePosition); },
+      err => rej(new Error(gpsFehlerText(err))),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  });
+}
+function gpsFehlerText(err) {
+  switch (err && err.code) {
+    case 1: return 'Standort-Zugriff wurde verweigert. Erlaube ihn in den Browser-Einstellungen (Website-Einstellungen → Standort) und versuch es erneut.';
+    case 2: return 'Standort gerade nicht verfügbar – kein GPS-Signal?';
+    case 3: return 'Das GPS hat zu lange gebraucht. Geh am besten ins Freie und versuch es noch mal.';
+    default: return 'Standort konnte nicht bestimmt werden.';
+  }
+}
+async function standortAlsStart() {
+  const btn = $('#btnStandort'); btn.disabled = true;
+  try {
+    const p = await aktuellePosition();
+    plan.start = { lat: p.lat, lon: p.lon, name: 'Mein Standort' }; $('#inStart').value = 'Mein Standort';
+    ergebnisVerwerfen(); renderPlanMarker();
+    if (planKarte) planKarte.setView([p.lat, p.lon], 13);
+  } catch (e) { dialog({ titel: 'Standort', html: `<p>${esc(e.message)}</p>` }); }
+  finally { btn.disabled = false; }
+}
+
+// Gemeinsamer Ablauf für alle Routensuchen (Knöpfe sperren, Fehler zeigen)
+async function routenSuche(fn) {
+  const btns = ['#btnBerechnen', '#btnRundtour', '#btnWuerfeln'].map(s => $(s));
+  const vorher = btns.map(b => b.disabled);
+  btns.forEach(b => b.disabled = true);
+  $('#ergebnis').innerHTML = '<div class="card"><p>⏳ <span id="suchStatus">Route wird berechnet …</span></p></div>';
+  try {
+    const r = await fn(t => { const s = $('#suchStatus'); if (s) s.textContent = t; });
+    plan.ergebnisse = r; plan.gewaehlt = 0;
+    renderErgebnis(); zeichneRouten(true); ladeWetter();
+    return true;
+  } catch (e) {
+    plan.ergebnisse = [];
+    $('#ergebnis').innerHTML = `<div class="warnbox bad">Route konnte nicht berechnet werden: ${esc(e.message)}<br><span class="klein">Später nochmal versuchen – der kostenlose Routing-Server ist manchmal überlastet.</span></div>`;
+    zeichneRouten(false);
+    return false;
+  } finally { btns.forEach((b, i) => b.disabled = vorher[i]); }
+}
+
+async function berechneRoute() {
+  if (!plan.start || !plan.ziel) return toast('Bitte Start und Ziel festlegen.');
+  const punkte = [plan.start, ...plan.vias, plan.ziel];
+  const wps = punkte.map(p => ({ lat: p.lat, lon: p.lon, name: p.name }));
+  await routenSuche(async status => {
+    let r;
+    if (plan.modus === 'kurvig') r = await kurvigeRouten(punkte, (i, n) => status(`Suche kurvige Varianten … ${i} von ${n}`));
+    else r = await osrmSicher(punkte, { alternativen: true, ohneAutobahn: plan.modus === 'ohneab' });
+    return r.map(x => ({ ...x, waypoints: wps, modus: plan.modus, name: `${plan.start.name} → ${plan.ziel.name}` }));
+  });
+}
+
+// Kurvig: Alternativen holen, Kurvigkeit berechnen, kurvigste zuerst.
+// Autobahnen werden hier immer ausgeschlossen (die sind nie kurvig).
+async function kurvigeRouten(punkte, fortschritt) {
+  let routen = await osrmSicher(punkte, { alternativen: true, ohneAutobahn: true });
+  if (routen.length < 3) {
+    // Zu wenige Alternativen: Varianten über seitlich versetzte Zwischenpunkte
+    // auf dem längsten Teilstück erzeugen
+    let li = 0, lmax = 0;
+    for (let i = 0; i < punkte.length - 1; i++) { const d = distanz(punkte[i], punkte[i + 1]); if (d > lmax) { lmax = d; li = i; } }
+    const a = punkte[li], b = punkte[li + 1];
+    const mitte = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+    const quer = peilung(a, b) + 90, km = lmax / 1000;
+    const versatz = [0.18, -0.18, 0.32, -0.32];
+    for (let j = 0; j < versatz.length && routen.length < 6; j++) {
+      if (fortschritt) fortschritt(j + 1, versatz.length);
+      const v = Math.sign(versatz[j]) * Math.min(Math.abs(km * versatz[j]), 25);
+      const zw = zielpunkt(mitte, quer, v);
+      try { routen.push(...await osrmSicher([...punkte.slice(0, li + 1), zw, ...punkte.slice(li + 1)], { ohneAutobahn: true })); }
+      catch (e) { /* Variante nicht möglich – überspringen */ }
+    }
+  }
+  // Doppelte (fast gleiche) Routen entfernen
+  const einzeln = [];
+  routen.forEach(r => { if (!einzeln.some(x => Math.abs(x.distance - r.distance) / r.distance < 0.01 && Math.abs(x.duration - r.duration) / r.duration < 0.01)) einzeln.push(r); });
+  einzeln.sort((x, y) => y.kurv - x.kurv);
+  return einzeln.slice(0, 5);
+}
+
+// Rundtour: Wegpunkte auf einem Kreis, der durch den Start geht
+function rundtourPunkte(start, km) {
+  const strassenFaktor = 1.3; // Straßen sind länger als die Luftlinie
+  const r = (km / strassenFaktor) / (2 * Math.PI);
+  const w0 = Math.random() * 360;
+  const mitte = zielpunkt(start, w0, r);
+  const n = 3 + Math.floor(Math.random() * 2); // 3–4 Wegpunkte
+  const richtung = Math.random() < 0.5 ? 1 : -1;
+  const pts = [];
+  for (let i = 1; i <= n; i++) {
+    const w = w0 + 180 + richtung * i * 360 / (n + 1) + (Math.random() - 0.5) * 20;
+    pts.push(zielpunkt(mitte, w, r * (0.85 + Math.random() * 0.3)));
+  }
+  return pts;
+}
+async function rundtour() {
+  if (!plan.start) {
+    try { const p = await aktuellePosition(); plan.start = { lat: p.lat, lon: p.lon, name: 'Mein Standort' }; $('#inStart').value = 'Mein Standort'; renderPlanMarker(); }
+    catch (e) { return toast('Bitte zuerst einen Start setzen (Suche, Standort oder Karte).', 5000); }
+  }
+  const km = plan.rundKm, start = plan.start;
+  const ok = await routenSuche(async status => {
+    let faktor = 1, beste = null;
+    for (let versuch = 0; versuch < 2; versuch++) {
+      status(versuch ? 'Länge wird angepasst …' : 'Rundtour wird gewürfelt …');
+      const pkt = [start, ...rundtourPunkte(start, km * faktor), start];
+      const r = (await osrmSicher(pkt, { ohneAutobahn: plan.modus !== 'schnell' }))[0];
+      r.waypoints = pkt.map((p, i) => ({ lat: p.lat, lon: p.lon, name: (i === 0 || i === pkt.length - 1) ? start.name : 'Wegpunkt ' + i }));
+      r.modus = 'rundtour'; r.name = `Rundtour ${km} km`;
+      if (!beste || Math.abs(r.distance / 1000 - km) < Math.abs(beste.distance / 1000 - km)) beste = r;
+      const abw = r.distance / 1000 / km;
+      if (abw > 0.8 && abw < 1.2) break;
+      faktor *= km / (r.distance / 1000);
+    }
+    return [beste];
+  });
+  if (ok) $('#btnWuerfeln').disabled = false;
+}
+
+// Persönlicher Zeitfaktor aus den letzten (bis zu 10) geplanten Fahrten
+function zeitFaktor() {
+  const r = cache.rides.filter(f => !f.demo && f.plan && f.plan.duration > 0 && f.plan.distance > 0 && f.fahrMs > 0
+    && f.distance / f.plan.distance >= 0.8 && f.distance / f.plan.distance <= 1.25)
+    .sort((a, b) => b.start - a.start).slice(0, 10);
+  if (!r.length) return null;
+  return { faktor: r.reduce((s, f) => s + f.fahrMs / (f.plan.duration * 1000), 0) / r.length, anzahl: r.length };
+}
+function aktivesBike() { return cache.bikes.find(b => b.id === einst.aktivesBike) || null; }
+function reichweite(b) { return b && b.tank > 0 && b.verbrauch > 0 ? b.tank / b.verbrauch * 100 : null; }
+function reichweitenWarnung(m) {
+  const b = aktivesBike(), rw = reichweite(b);
+  if (!rw) return '';
+  const km = m / 1000;
+  if (km > rw) return `<div class="warnbox bad">⛽ Die Route (${fmtKm(m)}) ist länger als die Tankreichweite deiner ${esc(b.name)} (ca. ${zahl(rw, 0)} km). Tankstopp einplanen!</div>`;
+  if (km > rw * 0.85) return `<div class="warnbox warn">⛽ Knapp: ca. ${zahl(rw, 0)} km Reichweite – vorher volltanken.</div>`;
+  return '';
+}
+
+function renderErgebnis() {
+  const box = $('#ergebnis');
+  if (!plan.ergebnisse.length) { box.innerHTML = ''; return; }
+  const f = zeitFaktor();
+  let html = plan.ergebnisse.length > 1 ? `<p class="klein">${plan.ergebnisse.length} Varianten – tippe zum Auswählen (auch auf der Karte).</p>` : '';
+  plan.ergebnisse.forEach((r, i) => {
+    const titel = r.modus === 'rundtour' ? r.name : (plan.modus === 'kurvig' && i === 0 ? 'Kurvigste Route' : 'Variante ' + (i + 1));
+    html += `<button class="route-karte ${i === plan.gewaehlt ? 'on' : ''}" data-i="${i}">
+      <div class="row"><b class="grow">${esc(titel)}</b><span class="sterne" title="Kurvigkeit">${sterneText(r.sterne)}</span></div>
+      <div class="route-zahlen"><span>${fmtKm(r.distance)}</span><span>${fmtDauer(r.duration * 1000)}</span><span>${zahl(r.kurv, 0)}°/km</span></div>
+    </button>`;
+  });
+  const r = plan.ergebnisse[plan.gewaehlt];
+  const eigene = f && Math.abs(f.faktor - 1) > 0.02
+    ? `<p><b>Deine Schätzung: ${fmtDauer(r.duration * 1000 * f.faktor)}</b> statt ${fmtDauer(r.duration * 1000)} <span class="klein">(aus ${f.anzahl} Fahrt${f.anzahl > 1 ? 'en' : ''})</span></p>` : '';
+  html += `<div class="card">
+    <div class="stat-grid">
+      <div><b>${fmtKm(r.distance)}</b><span>Distanz</span></div>
+      <div><b>${fmtDauer(r.duration * 1000)}</b><span>geschätzte Fahrzeit</span></div>
+    </div>
+    ${eigene}
+    <p class="klein">Kurvigkeit: ${sterneText(r.sterne)} (${zahl(r.kurv, 0)}° Richtungsänderung pro km, grobe Schätzung)</p>
+    <div id="wetterBox" class="wetter"><div>Wetter wird geladen …</div></div>
+    ${reichweitenWarnung(r.distance)}
+    <button class="btn primary block gross" id="btnRouteFahren">🏍️ Diese Route fahren</button>
+    <div class="row mt"><button class="btn grow" id="btnRouteSpeichern">💾 Speichern</button><button class="btn grow" id="btnRouteGpx">GPX exportieren</button></div>
+  </div>`;
+  box.innerHTML = html;
+  $$('.route-karte', box).forEach(b => b.onclick = () => waehleRoute(+b.dataset.i));
+  $('#btnRouteFahren').onclick = () => { setAktiveRoute({ ...r, quelle: r }); zeigeTab('fahren'); };
+  $('#btnRouteSpeichern').onclick = () => routeSpeichern(r);
+  $('#btnRouteGpx').onclick = () => herunterladen(dateiName(r.name) + '.gpx', gpxAusRoute(r), 'application/gpx+xml');
+}
+function waehleRoute(i) { plan.gewaehlt = i; renderErgebnis(); zeichneRouten(false); ladeWetter(); }
+function zeichneRouten(zoom) {
+  if (!planKarte || !planLinien) return;
+  planLinien.clearLayers();
+  // Andere Varianten halbtransparent
+  plan.ergebnisse.forEach((r, i) => {
+    if (i === plan.gewaehlt) return;
+    const l = L.polyline(r.geometry, { color: '#7a8591', weight: 7, opacity: 0.45, bubblingMouseEvents: false }).addTo(planLinien);
+    l.on('click', e => { L.DomEvent.stopPropagation(e); waehleRoute(i); });
+  });
+  const r = plan.ergebnisse[plan.gewaehlt];
+  if (!r) return;
+  L.polyline(r.geometry, { color: '#000', weight: 10, opacity: 0.3, interactive: false }).addTo(planLinien);
+  L.polyline(r.geometry, { color: farbe('--route') || '#c2185b', weight: 6, opacity: 1, interactive: false }).addTo(planLinien);
+  if (r.modus === 'rundtour') r.waypoints.slice(1, -1).forEach(w => L.circleMarker([w.lat, w.lon], { radius: 7, color: '#fff', weight: 2, fillColor: '#0b5cad', fillOpacity: 1, interactive: false }).addTo(planLinien));
+  if (zoom) { try { planKarte.fitBounds(L.latLngBounds(r.geometry), { padding: [30, 30] }); } catch (e) {} }
+}
+async function ladeWetter() {
+  const r = plan.ergebnisse[plan.gewaehlt]; if (!r) return;
+  const token = ++wetterToken;
+  const a = ll(r.geometry[0]), b = ll(r.geometry[r.geometry.length - 1]);
+  const orte = distanz(a, b) < 1000 ? [['Start/Ziel', a]] : [['Start', a], ['Ziel', b]];
+  const erg = await Promise.allSettled(orte.map(o => wetter(o[1])));
+  const box = $('#wetterBox');
+  if (!box || token !== wetterToken) return;
+  box.innerHTML = orte.map((o, i) => {
+    const e = erg[i];
+    if (e.status !== 'fulfilled') return `<div>${o[0]}: Wetter nicht verfügbar</div>`;
+    const w = e.value;
+    return `<div><b>${o[0]}:</b> ${zahl(w.temp, 0)} °C · ${w.regen == null ? '–' : w.regen + ' %'} Regen · Wind ${zahl(w.wind, 0)} km/h</div>`;
+  }).join('');
+}
+
+// Routen speichern / verwalten
+async function routeSpeichern(r) {
+  const name = await eingabe('Route speichern', 'Name der Route', r.name || 'Meine Route');
+  if (name === null) return;
+  const obj = { id: uid(), name: name.trim() || 'Route', erstellt: Date.now(), modus: r.modus, waypoints: r.waypoints || [], geometry: r.geometry, distance: r.distance, duration: r.duration, kurv: r.kurv, sterne: r.sterne };
+  await Speicher.setze('routes', obj);
+  cache.routes.push(obj);
+  renderRoutenListe(); toast('Route gespeichert.');
+}
+function renderRoutenListe() {
+  const el = $('#routenListe');
+  const liste = [...cache.routes].sort((a, b) => b.erstellt - a.erstellt);
+  if (!liste.length) { el.innerHTML = '<p class="klein">Noch keine gespeicherten Routen. Plane eine Route und tippe auf „Speichern“.</p>'; return; }
+  el.innerHTML = liste.map(r => `<div class="routen-eintrag">
+    <div class="row"><b class="grow">${esc(r.name)}</b><span class="sterne">${sterneText(r.sterne || 1)}</span></div>
+    <div class="klein">${fmtKm(r.distance)} · ${fmtDauer(r.duration * 1000)} · ${fmtDatum(r.erstellt)}</div>
+    <div class="row wrap mt"><button class="btn grow" data-a="zeigen" data-id="${r.id}">Anzeigen</button><button class="btn primary grow" data-a="fahren" data-id="${r.id}">Fahren</button></div>
+    <div class="row mt"><button class="btn grow" data-a="name" data-id="${r.id}" aria-label="Umbenennen">✏️ Name</button><button class="btn grow" data-a="gpx" data-id="${r.id}">GPX</button><button class="btn grow danger-outline" data-a="weg" data-id="${r.id}" aria-label="Löschen">🗑️</button></div>
+  </div>`).join('');
+}
+async function routenAktion(aktion, id) {
+  const r = cache.routes.find(x => x.id === id); if (!r) return;
+  if (aktion === 'zeigen') {
+    const wp = r.waypoints && r.waypoints.length >= 2 ? r.waypoints : [ll(r.geometry[0]), ll(r.geometry[r.geometry.length - 1])];
+    plan.start = { ...wp[0], name: wp[0].name || 'Start' }; plan.ziel = { ...wp[wp.length - 1], name: wp[wp.length - 1].name || 'Ziel' };
+    plan.vias = r.modus === 'rundtour' || r.modus === 'gpx' ? [] : wp.slice(1, -1).map(w => ({ ...w }));
+    $('#inStart').value = plan.start.name; $('#inZiel').value = plan.ziel.name;
+    plan.ergebnisse = [{ ...r }]; plan.gewaehlt = 0;
+    renderPlanMarker(); renderErgebnis(); zeichneRouten(true); ladeWetter();
+    $('#planPanel').scrollTop = 0;
+  } else if (aktion === 'fahren') {
+    setAktiveRoute(r); zeigeTab('fahren');
+  } else if (aktion === 'name') {
+    const n = await eingabe('Route umbenennen', 'Neuer Name', r.name);
+    if (n === null) return;
+    r.name = n.trim() || r.name; await Speicher.setze('routes', r); renderRoutenListe();
+  } else if (aktion === 'gpx') {
+    herunterladen(dateiName(r.name) + '.gpx', gpxAusRoute(r), 'application/gpx+xml');
+  } else if (aktion === 'weg') {
+    if (!await frage('Route löschen?', `„${esc(r.name)}“ wirklich löschen? Das kann nicht rückgängig gemacht werden.`, 'Löschen', 'danger')) return;
+    await Speicher.loesche('routes', id);
+    cache.routes = cache.routes.filter(x => x.id !== id);
+    if (aktiveRoute && aktiveRoute.id === id && !rec) setAktiveRoute(null);
+    renderRoutenListe(); toast('Route gelöscht.');
+  }
+}
+
+/* ===================== 7b) STARTORTE & TOURENVORSCHLÄGE ===================== */
+// Startorte (z. B. Zuhause) – werden nur lokal in den Einstellungen gespeichert
+function startorteRendern() {
+  const liste = einst.startorte;
+  const std = id => id === einst.standardStart;
+  // Schnellauswahl im Tab Planen
+  $('#startortChips').innerHTML = liste.map(o => `<button class="ort-chip" data-id="${o.id}">${std(o.id) ? '⭐' : '📍'} ${esc(o.name)}</button>`).join('');
+  // Verwaltung in den Einstellungen
+  $('#startortListe').innerHTML = liste.length ? liste.map(o => `<div class="routen-eintrag">
+      <div class="row"><b class="grow">${esc(o.name)}</b>${std(o.id) ? '<span class="pill good">Standard</span>' : ''}</div>
+      <div class="klein">${koordText(o)}</div>
+      <div class="row wrap mt">${std(o.id) ? '' : `<button class="btn grow" data-a="standard" data-id="${o.id}">⭐ Als Standard</button>`}<button class="btn grow" data-a="name" data-id="${o.id}">✏️ Name</button><button class="btn grow danger-outline" data-a="weg" data-id="${o.id}" aria-label="Startort löschen">🗑️</button></div>
+    </div>`).join('') : '<p class="klein">Noch keine Startorte gespeichert.</p>';
+  // Auswahl im Tab Touren
+  const sel = $('#selTourStart'), vorher = sel.value;
+  sel.innerHTML = liste.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('') + '<option value="__gps">📍 Aktueller Standort</option>';
+  sel.value = (vorher === '__gps' || liste.some(o => o.id === vorher)) ? vorher : (einst.standardStart || '__gps');
+}
+function startortSetzen(o, zoom = true) {
+  plan.start = { lat: o.lat, lon: o.lon, name: o.name };
+  $('#inStart').value = o.name; $('#trefferStart').innerHTML = '';
+  ergebnisVerwerfen(); renderPlanMarker();
+  if (zoom && planKarte) planKarte.setView([o.lat, o.lon], 12);
+}
+async function startortSpeichern() {
+  if (!plan.start) return toast('Setz zuerst einen Start (Suche, Standort oder Karte).', 4500);
+  if (einst.startorte.length >= 10) return toast('Maximal 10 Startorte.');
+  const name = await eingabe('Startort speichern', 'Name (z. B. Zuhause, Arbeit)', einst.startorte.length ? '' : 'Zuhause');
+  if (name === null) return;
+  const o = { id: uid(), name: name.trim() || 'Startort', lat: +plan.start.lat.toFixed(5), lon: +plan.start.lon.toFixed(5) };
+  einst.startorte.push(o);
+  if (!einst.standardStart) einst.standardStart = o.id;
+  await einstSpeichern();
+  plan.start.name = o.name; $('#inStart').value = o.name;
+  startorteRendern(); toast(`„${o.name}“ gespeichert.${einst.standardStart === o.id ? ' Wird beim Öffnen automatisch als Start gesetzt.' : ''}`, 4500);
+}
+async function startortAktion(a, id) {
+  const o = einst.startorte.find(x => x.id === id); if (!o) return;
+  if (a === 'standard') { einst.standardStart = id; toast(`„${o.name}“ ist jetzt der Standard-Startort.`); }
+  else if (a === 'name') {
+    const n = await eingabe('Startort umbenennen', 'Neuer Name', o.name); if (n === null) return;
+    o.name = n.trim() || o.name;
+  } else if (a === 'weg') {
+    if (!await frage('Startort löschen?', `„${esc(o.name)}“ wirklich löschen?`, 'Löschen', 'danger')) return;
+    einst.startorte = einst.startorte.filter(x => x.id !== id);
+    if (einst.standardStart === id) einst.standardStart = einst.startorte[0] ? einst.startorte[0].id : null;
+  }
+  await einstSpeichern(); startorteRendern();
+  if (aktuellerTab === 'touren') renderTouren();
+}
+
+// Tourenvorschläge: Rundkurse über echte Orte (Koordinaten = Ortsmitte).
+// Die genaue Strecke berechnet OSRM beim Antippen (ohne Autobahn).
+const GEGENDEN = [['alle', 'Alle'], ['bgl', 'Bergisch Gladbach'], ['roe', 'Rösrath'], ['ove', 'Overath'], ['koe', 'Köln'], ['lev', 'Leverkusen'], ['umg', 'Umgebung']];
+const TOUREN = [
+  { id: 'feierabend', name: 'Feierabendrunde Köln-Ost', gegend: ['koe', 'roe', 'ove', 'bgl'],
+    text: 'Kurze Runde nach der Arbeit: raus aus Köln über Rösrath nach Overath an der Agger, über Bensberg und Bergisch Gladbach zurück. Am Anfang Stadtverkehr einplanen.',
+    orte: [['Köln', 50.9375, 6.9603], ['Rösrath', 50.8953, 7.1850], ['Overath', 50.9328, 7.2839], ['Bensberg', 50.9617, 7.1608], ['Bergisch Gladbach', 50.9917, 7.1367]] },
+  { id: 'dhuenn', name: 'Dhünntal & Altenberger Dom', gegend: ['bgl', 'lev', 'umg'],
+    text: 'Durchs Dhünntal zum Altenberger Dom, über Burscheid nach Wermelskirchen und über Kürten zurück – vorbei an der Gegend um die Große Dhünntalsperre.',
+    orte: [['Bergisch Gladbach', 50.9917, 7.1367], ['Odenthal', 51.0333, 7.1167], ['Altenberger Dom', 51.0539, 7.1324], ['Burscheid', 51.1000, 7.1167], ['Wermelskirchen', 51.1392, 7.2153], ['Kürten', 51.0500, 7.2667]] },
+  { id: 'wupper', name: 'Wupper & Schloss Burg', gegend: ['lev', 'umg'],
+    text: 'Von Leverkusen über Leichlingen ins Tal der Wupper, hoch zu Schloss Burg (Burg an der Wupper) und über Burscheid zurück.',
+    orte: [['Leverkusen', 51.0333, 6.9833], ['Leichlingen', 51.1064, 7.0186], ['Schloss Burg', 51.1360, 7.1522], ['Burscheid', 51.1000, 7.1167]] },
+  { id: 'levkuerten', name: 'Leverkusen – Kürten – Odenthal', gegend: ['lev', 'bgl'],
+    text: 'Halbtagesrunde: von Leverkusen über Bergisch Gladbach nach Kürten, dann über Odenthal und Burscheid zurück.',
+    orte: [['Leverkusen', 51.0333, 6.9833], ['Bergisch Gladbach', 50.9917, 7.1367], ['Kürten', 51.0500, 7.2667], ['Odenthal', 51.0333, 7.1167], ['Burscheid', 51.1000, 7.1167]] },
+  { id: 'kuertenwk', name: 'Lindlar – Kürten – Wermelskirchen', gegend: ['ove', 'bgl', 'umg'],
+    text: 'Folgt grob dem Abschnitt Hohkeppel – Linde – Kürten – Wermelskirchen, den motorradonline empfiehlt. Hier vereinfacht über Lindlar geplant.',
+    orte: [['Overath', 50.9328, 7.2839], ['Lindlar', 51.0194, 7.3772], ['Kürten', 51.0500, 7.2667], ['Wermelskirchen', 51.1392, 7.2153], ['Bergisch Gladbach', 50.9917, 7.1367]] },
+  { id: 'bever', name: 'Runde zur Bevertalsperre', gegend: ['bgl', 'ove', 'umg'],
+    text: 'Nach Norden über Kürten nach Wipperfürth und Hückeswagen – dort liegt die Bevertalsperre, ein beliebter Pausenpunkt – und über Wermelskirchen und Odenthal zurück.',
+    orte: [['Bergisch Gladbach', 50.9917, 7.1367], ['Kürten', 51.0500, 7.2667], ['Wipperfürth', 51.1167, 7.4000], ['Hückeswagen', 51.1450, 7.3439], ['Wermelskirchen', 51.1392, 7.2153], ['Odenthal', 51.0333, 7.1167]] },
+  { id: 'wahnbach', name: 'Wahnbach & Bergische Höhen', gegend: ['roe', 'ove', 'umg'],
+    text: 'Kompakte Runde südlich von Rösrath: über Lohmar nach Neunkirchen-Seelscheid (Wahnbachtalsperre in der Nähe), weiter nach Much und über Overath zurück.',
+    orte: [['Rösrath', 50.8953, 7.1850], ['Lohmar', 50.8414, 7.2161], ['Neunkirchen-Seelscheid', 50.8667, 7.3333], ['Much', 50.9050, 7.4028], ['Overath', 50.9328, 7.2839]] },
+  { id: 'sieg', name: 'Sieg-Runde', gegend: ['roe', 'ove', 'umg'],
+    text: 'Über Siegburg ins Siegtal nach Hennef und Eitorf, über Ruppichteroth und Much zurück ins Aggertal.',
+    orte: [['Rösrath', 50.8953, 7.1850], ['Siegburg', 50.8014, 7.2044], ['Hennef', 50.7750, 7.2833], ['Eitorf', 50.7700, 7.4500], ['Ruppichteroth', 50.8436, 7.4836], ['Much', 50.9050, 7.4028], ['Overath', 50.9328, 7.2839]] },
+  { id: 'agger', name: 'Aggertal & Oberberg', gegend: ['ove', 'umg'],
+    text: 'Das Aggertal hoch nach Engelskirchen und Gummersbach, zur Aggertalsperre bei Bergneustadt, über Marienheide und Lindlar zurück.',
+    orte: [['Overath', 50.9328, 7.2839], ['Engelskirchen', 50.9886, 7.4161], ['Gummersbach', 51.0264, 7.5653], ['Bergneustadt', 51.0247, 7.6519], ['Marienheide', 51.0833, 7.5333], ['Lindlar', 51.0194, 7.3772]] },
+  { id: 'talsperren', name: 'Große Talsperren-Tour', gegend: ['ove', 'umg'],
+    text: 'Tagestour angelehnt an die Talsperren-Tour von Motorrad & Reisen (Start dort: Overath): Große Dhünn, Bever, Agger und Wahnbach. Vereinfacht über die Orte geplant – die Original-Tour nimmt kleinere Straßen.',
+    orte: [['Overath', 50.9328, 7.2839], ['Kürten', 51.0500, 7.2667], ['Hückeswagen', 51.1450, 7.3439], ['Marienheide', 51.0833, 7.5333], ['Bergneustadt', 51.0247, 7.6519], ['Eitorf', 50.7700, 7.4500], ['Neunkirchen-Seelscheid', 50.8667, 7.3333]] }
+];
+let tourFilter = 'alle', tourLaeuft = false;
+const tourPunkte = t => t.orte.map(o => ({ name: o[0], lat: o[1], lon: o[2] }));
+// Gewählter Startort im Tab Touren ({lat,lon,name} oder GPS-Platzhalter)
+function tourStartort() {
+  const v = $('#selTourStart').value;
+  if (v === '__gps') return letztePosition ? { lat: letztePosition.lat, lon: letztePosition.lon, name: 'Mein Standort', gps: true } : { name: 'Mein Standort', gps: true };
+  const o = einst.startorte.find(x => x.id === v);
+  return o ? { lat: o.lat, lon: o.lon, name: o.name } : null;
+}
+// Punkte-Liste für OSRM. Mit Anfahrt: Einstieg am nächsten Tourpunkt, Runde fahren, zurück zum Startort.
+function tourPlan(t, start, anfahrt) {
+  const pts = tourPunkte(t);
+  if (!anfahrt || !start || start.lat == null) return [...pts, pts[0]];
+  let ni = 0, nd = Infinity;
+  pts.forEach((p, i) => { const d = distanz(start, p); if (d < nd) { nd = d; ni = i; } });
+  const rund = [...pts.slice(ni), ...pts.slice(0, ni)];
+  const s = { lat: start.lat, lon: start.lon, name: start.name };
+  return nd < 2000 ? [s, ...rund.slice(1), s] : [s, ...rund, rund[0], s];
+}
+// Grobe Längenschätzung: Luftlinie × 1,3
+function laengeSchaetzung(pkt) { let s = 0; for (let i = 1; i < pkt.length; i++) s += distanz(pkt[i - 1], pkt[i]); return s * 1.3; }
+function renderTouren() {
+  const start = tourStartort(), anfahrt = $('#chkAnfahrt').checked;
+  const hatPos = !!(start && start.lat != null);
+  $('#tourFilter').innerHTML = GEGENDEN.map(g => `<button class="filter-chip ${g[0] === tourFilter ? 'on' : ''}" data-g="${g[0]}">${g[1]}</button>`).join('');
+  const liste = TOUREN.filter(t => tourFilter === 'alle' || t.gegend.includes(tourFilter)).map(t => {
+    const ein = hatPos ? tourPunkte(t).reduce((m, p) => { const d = distanz(start, p); return d < m.d ? { d, p } : m; }, { d: Infinity, p: null }) : null;
+    return { t, ein };
+  });
+  if (hatPos) liste.sort((a, b) => a.ein.d - b.ein.d); // nächste Touren zuerst
+  $('#tourListe').innerHTML = liste.map(({ t, ein }) => {
+    const km = laengeSchaetzung(tourPlan(t, start, anfahrt)) / 1000;
+    return `<div class="card tour">
+      <div class="row"><h3 class="grow" style="margin:0">${esc(t.name)}</h3><span class="pill">ca. ${zahl(km, 0)} km</span></div>
+      <p>${esc(t.text)}</p>
+      <p class="klein">Orte: ${t.orte.map(o => esc(o[0])).join(' → ')} → ${esc(t.orte[0][0])}</p>
+      ${ein ? `<p class="klein">Einstieg: ${esc(ein.p.name)}, ca. ${zahl(ein.d / 1000, ein.d < 10000 ? 1 : 0)} km Luftlinie von „${esc(start.name)}“</p>` : ''}
+      <button class="btn primary block" data-tour="${t.id}">🧭 Route berechnen</button>
+    </div>`;
+  }).join('') || '<div class="leer">Keine Tour in dieser Gegend.</div>';
+}
+async function tourBerechnen(id) {
+  const t = TOUREN.find(x => x.id === id);
+  if (!t || tourLaeuft) return;
+  tourLaeuft = true;
+  try {
+    const anfahrt = $('#chkAnfahrt').checked;
+    let start = tourStartort();
+    if (anfahrt && start && start.gps && start.lat == null) {
+      try { toast('Standort wird bestimmt …'); const p = await aktuellePosition(); start = { lat: p.lat, lon: p.lon, name: 'Mein Standort' }; }
+      catch (e) { dialog({ titel: 'Standort', html: `<p>${esc(e.message)}</p><p>Tipp: Speichere einen Startort (Planen → ⭐) oder nimm den Haken bei „Anfahrt“ raus.</p>` }); return; }
+    }
+    const pkt = tourPlan(t, start, anfahrt);
+    plan.start = { ...pkt[0] }; plan.ziel = null; plan.vias = [];
+    $('#inStart').value = pkt[0].name; $('#inZiel').value = '';
+    $('#trefferStart').innerHTML = ''; $('#trefferZiel').innerHTML = '';
+    renderPlanMarker(); zeigeTab('planen');
+    const ok = await routenSuche(async status => {
+      status(`„${t.name}“ wird berechnet …`);
+      const r = (await osrmSicher(pkt, { ohneAutobahn: true }))[0];
+      r.waypoints = pkt.map(p => ({ lat: p.lat, lon: p.lon, name: p.name }));
+      r.modus = 'rundtour'; r.name = t.name;
+      return [r];
+    });
+    const box = $('#ergebnis'); if (box) box.scrollIntoView({ block: 'start' });
+    if (ok) toast('Fertig – unten „Diese Route fahren“ oder „Speichern“.');
+  } finally { tourLaeuft = false; }
+}
+
+/* ===================== 8) GPX ===================== */
+function gpxKopf(name) {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Kurvenbuch" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${esc(name)}</name></metadata>\n`;
+}
+function gpxAusRoute(r) {
+  const wpt = (r.waypoints || []).map((w, i) => `<wpt lat="${(+w.lat).toFixed(6)}" lon="${(+w.lon).toFixed(6)}"><name>${esc(w.name || 'Punkt ' + (i + 1))}</name></wpt>`).join('\n');
+  const trk = r.geometry.map(g => `<trkpt lat="${g[0].toFixed(6)}" lon="${g[1].toFixed(6)}"/>`).join('\n');
+  return gpxKopf(r.name) + wpt + `\n<trk><name>${esc(r.name)}</name><trkseg>\n${trk}\n</trkseg></trk>\n</gpx>\n`;
+}
+function gpxAusFahrt(f) {
+  const segs = (f.segmente || []).map(s => '<trkseg>\n' + s.map(p =>
+    `<trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}">${p.a != null ? `<ele>${p.a}</ele>` : ''}<time>${new Date(p.t).toISOString()}</time></trkpt>`).join('\n') + '\n</trkseg>').join('\n');
+  return gpxKopf(f.name) + `<trk><name>${esc(f.name)}</name>\n${segs}\n</trk>\n</gpx>\n`;
+}
+function gpxLesen(text) {
+  const xml = new DOMParser().parseFromString(text, 'application/xml');
+  if (xml.getElementsByTagName('parsererror').length) throw new Error('Das ist keine gültige GPX-Datei.');
+  const pts = tag => [...xml.getElementsByTagName(tag)].map(n => ({
+    lat: parseFloat(n.getAttribute('lat')), lon: parseFloat(n.getAttribute('lon')),
+    name: (n.getElementsByTagName('name')[0] || {}).textContent || ''
+  })).filter(p => isFinite(p.lat) && isFinite(p.lon));
+  const nameEl = xml.getElementsByTagName('name')[0];
+  return { name: (nameEl && nameEl.textContent.trim()) || 'GPX-Route', trk: pts('trkpt'), rte: pts('rtept'), wpt: pts('wpt') };
+}
+async function gpxImportieren(datei) {
+  try {
+    const g = gpxLesen(await dateiLesen(datei));
+    if (g.trk.length >= 2) {
+      // Spur direkt übernehmen. Fahrzeit-Schätzung mit Ø 55 km/h, weil GPX keine Zeitplanung enthält.
+      const geo = g.trk.map(p => [p.lat, p.lon]);
+      const c = kumuliert(geo), dist = c[c.length - 1], k = kurvigkeit(geo);
+      const r = { id: uid(), name: g.name, erstellt: Date.now(), modus: 'gpx', waypoints: [g.trk[0], g.trk[g.trk.length - 1]].map(p => ({ lat: p.lat, lon: p.lon, name: '' })), geometry: geo, distance: dist, duration: dist / (55 / 3.6), kurv: k, sterne: sterne(k) };
+      await Speicher.setze('routes', r); cache.routes.push(r);
+      renderRoutenListe(); routenAktion('zeigen', r.id);
+      toast('GPX-Route importiert (Fahrzeit geschätzt mit Ø 55 km/h).', 5000);
+    } else {
+      const p = (g.rte.length >= 2 ? g.rte : g.wpt).slice(0, 25);
+      if (p.length < 2) throw new Error('In der Datei sind keine Punkte gefunden worden.');
+      plan.start = { lat: p[0].lat, lon: p[0].lon, name: p[0].name || 'Start' };
+      plan.ziel = { lat: p[p.length - 1].lat, lon: p[p.length - 1].lon, name: p[p.length - 1].name || 'Ziel' };
+      plan.vias = p.slice(1, -1).map((x, i) => ({ lat: x.lat, lon: x.lon, name: x.name || 'Zwischenstopp ' + (i + 1) }));
+      $('#inStart').value = plan.start.name; $('#inZiel').value = plan.ziel.name;
+      plan.modus = 'schnell'; $$('#segModus button').forEach(b => b.classList.toggle('on', b.dataset.v === 'schnell'));
+      renderPlanMarker(); await berechneRoute();
+    }
+  } catch (e) { dialog({ titel: 'GPX-Import', html: `<p>${esc(e.message)}</p>` }); }
+}
+
+/* ===================== 9) FAHREN (Aufzeichnung) ===================== */
+let trackLinie = null, routeLinie = null, posMarker = null, folgen = true;
+let aktiveRoute = null;   // geplante Route für die Fahrt
+let rec = null;           // laufende Aufzeichnung
+let gpsWatch = null, tickTimer = null, wakeLock = null, audioCtx = null;
+let letztePosition = null, letzterFix = 0, fahrsperre = false, sperreSeit = 0, letztesSichern = 0, linieZuletzt = 0;
+
+function fahrKarteInit() {
+  fahrKarte = karteErstellen('fahrKarte');
+  if (!fahrKarte) return;
+  routeLinie = L.polyline([], { color: farbe('--route') || '#c2185b', weight: 6, opacity: 0.55, dashArray: '10 8', interactive: false }).addTo(fahrKarte);
+  trackLinie = L.polyline([], { color: farbe('--track') || '#0b5cad', weight: 6, interactive: false }).addTo(fahrKarte);
+  fahrKarte.on('dragstart', () => { folgen = false; $('#btnZentrieren').hidden = false; });
+}
+function setAktiveRoute(r) {
+  if (!r || !r.geometry || r.geometry.length < 2) {
+    aktiveRoute = null;
+    if (routeLinie) routeLinie.setLatLngs([]);
+    if (rec) rec.plan = null;
+  } else {
+    const cum = kumuliert(r.geometry);
+    const a = ll(r.geometry[0]), b = ll(r.geometry[r.geometry.length - 1]);
+    aktiveRoute = { id: r.id || null, quelle: r.quelle || null, name: r.name, geometry: r.geometry, distance: r.distance, duration: r.duration, cum, geoLaenge: cum[cum.length - 1] || 1, idx: 0, gefunden: false, rest: null, rundkurs: distanz(a, b) < 300 };
+    if (routeLinie) {
+      routeLinie.setLatLngs(r.geometry);
+      if (!rec) { try { fahrKarte.fitBounds(routeLinie.getBounds(), { padding: [20, 20] }); } catch (e) {} }
+    }
+    if (rec) rec.plan = { routeId: aktiveRoute.id, name: r.name, duration: r.duration, distance: r.distance };
+  }
+  renderRoutenAuswahl(); fahrUIAktualisieren(true);
+}
+function renderRoutenAuswahl() {
+  const sel = $('#selRoute');
+  const planR = plan.ergebnisse[plan.gewaehlt];
+  let html = '<option value="">Ohne geplante Route</option>';
+  if (aktiveRoute && !aktiveRoute.id) html += `<option value="__aktiv">Aktiv: ${esc(aktiveRoute.name)}</option>`;
+  if (planR && !(aktiveRoute && aktiveRoute.quelle === planR)) html += `<option value="__plan">Gerade geplant: ${esc(planR.name)}</option>`;
+  [...cache.routes].sort((a, b) => b.erstellt - a.erstellt).forEach(r => html += `<option value="${r.id}">${esc(r.name)} (${fmtKm(r.distance)})</option>`);
+  sel.innerHTML = html;
+  sel.value = aktiveRoute ? (aktiveRoute.id || '__aktiv') : '';
+}
+function routeAuswahlGeaendert() {
+  const v = $('#selRoute').value;
+  if (v === '') setAktiveRoute(null);
+  else if (v === '__plan') { const r = plan.ergebnisse[plan.gewaehlt]; if (r) setAktiveRoute({ ...r, quelle: r }); }
+  else if (v !== '__aktiv') setAktiveRoute(cache.routes.find(r => r.id === v));
+}
+function fahrBikeAnzeigen() {
+  const b = aktivesBike();
+  $('#fahrBike').textContent = b ? `Motorrad: ${b.name}` : 'Kein Motorrad gewählt (Garage)';
+}
+function gpsStatus(text, art) { const el = $('#gpsStatus'); el.textContent = text; el.className = 'pill' + (art ? ' ' + art : ''); }
+
+async function fahrtStarten(demoModus = false) {
+  if (rec) return;
+  if (!demoModus) {
+    if (!window.isSecureContext) return dialog({ titel: 'GPS nicht verfügbar', html: `<p>${TXT_UNSICHER}</p><p>Zum Testen am PC kannst du die Demo-Fahrt (🧪) nutzen.</p>` });
+    if (!('geolocation' in navigator)) return dialog({ titel: 'GPS nicht verfügbar', html: '<p>Dein Browser unterstützt keine Standortbestimmung.</p>' });
+  }
+  audioStarten();
+  if (demoModus) demoVorbereiten();
+  rec = neueAufzeichnung(demoModus);
+  letzterFix = jetzt(); folgen = true; $('#btnZentrieren').hidden = true;
+  if (aktiveRoute) { aktiveRoute.idx = 0; aktiveRoute.gefunden = false; aktiveRoute.rest = null; }
+  if (trackLinie) trackLinie.setLatLngs([]);
+  if (demoModus) demoStarten(); else gpsStarten();
+  tickTimer = setInterval(tick, 500);
+  steuerungAnzeigen(); fahrUIAktualisieren(true);
+  await wakeLockAnfordern();
+  if (!('wakeLock' in navigator)) toast('Dein Browser kann den Bildschirm nicht wachhalten – stell das Display-Timeout hoch.', 6000);
+}
+function neueAufzeichnung(demoModus) {
+  const t = jetzt();
+  return {
+    id: uid(), demo: !!demoModus, zustand: 'faehrt', start: t, letzterTick: t, fahrMs: 0,
+    segmente: [[]], distanz: 0, maxSpeed: 0, maxSpeedPos: null, puffer: [], tempo: 0,
+    letzterSpeedFix: null, letzterTrackPunkt: null, langsamSeit: null, autoPause: false,
+    naechstePause: ZWEI_STUNDEN, hmGewinn: 0, hmRef: null, leanL: 0, leanR: 0,
+    bikeId: einst.aktivesBike || null,
+    plan: aktiveRoute ? { routeId: aktiveRoute.id, name: aktiveRoute.name, duration: aktiveRoute.duration, distance: aktiveRoute.distance } : null
+  };
+}
+
+// --- GPS ---
+function gpsStarten() {
+  gpsStatus('GPS wird gesucht …', 'warn');
+  try { gpsWatch = navigator.geolocation.watchPosition(fixVerarbeiten, gpsFehler, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }); }
+  catch (e) { gpsFehler({ code: 0 }); }
+}
+function gpsStoppen() { if (gpsWatch !== null) { try { navigator.geolocation.clearWatch(gpsWatch); } catch (e) {} gpsWatch = null; } }
+function gpsFehler(err) {
+  if (err && err.code === 1) {
+    gpsStoppen(); gpsStatus('GPS verweigert', 'bad');
+    const leer = rec && rec.distanz < 10;
+    dialog({ titel: 'Kein Standort-Zugriff', html: `<p>${esc(gpsFehlerText(err))}</p>${leer ? '' : '<p>Die bisherige Aufzeichnung bleibt erhalten – tippe auf Stopp zum Speichern.</p>'}` });
+    if (leer) aufzeichnungVerwerfen();
+  } else gpsStatus(err && err.code === 3 ? 'Kein GPS-Signal …' : 'GPS nicht verfügbar', 'warn');
+}
+
+// Ein GPS-Punkt kommt an (echt oder aus der Demo)
+function fixVerarbeiten(pos) {
+  const c = pos && pos.coords; if (!c) return;
+  const t = pos.timestamp || jetzt();
+  const p = { lat: c.latitude, lon: c.longitude };
+  if (!isFinite(p.lat) || !isFinite(p.lon)) return;
+  letzterFix = jetzt();
+  // Filter 1: ungenaue Punkte (schlechter als 25 m) verwerfen
+  if (!(c.accuracy <= 25)) { gpsStatus(`GPS ungenau (±${Math.round(c.accuracy || 0)} m)`, 'warn'); return; }
+  gpsStatus(`GPS ±${Math.round(c.accuracy)} m`, 'good');
+  letztePosition = { lat: p.lat, lon: p.lon, t };
+  if (!rec) return;
+
+  // Tempo: coords.speed (m/s → km/h), sonst aus Strecke/Zeit berechnen
+  const vorher = rec.letzterSpeedFix;
+  let v = 0;
+  if (vorher) {
+    const dt = (t - vorher.t) / 1000;
+    if (dt <= 0) return;
+    const vCalc = distanz(vorher, p) / dt * 3.6;
+    if (vCalc > 300) return; // Filter 2: unrealistischer Sprung → verwerfen
+    v = (typeof c.speed === 'number' && isFinite(c.speed) && c.speed >= 0) ? c.speed * 3.6 : vCalc;
+  } else if (typeof c.speed === 'number' && isFinite(c.speed) && c.speed >= 0) v = c.speed * 3.6;
+  if (v > 300) return;
+  rec.letzterSpeedFix = { lat: p.lat, lon: p.lon, t };
+  // Gleitender Mittelwert über die letzten 5 Werte (gegen Ausreißer)
+  rec.puffer.push(v); if (rec.puffer.length > 5) rec.puffer.shift();
+  const vs = rec.puffer.reduce((a, b) => a + b, 0) / rec.puffer.length;
+  rec.tempo = vs;
+  positionZeigen(p);
+  fahrsperrePruefen(vs);
+  if (rec.zustand !== 'faehrt') return;
+
+  // Auto-Pause: länger als 60 s unter 3 km/h → Pause (die Stehzeit wird abgezogen)
+  if (vs < 3) {
+    if (rec.langsamSeit === null) rec.langsamSeit = t;
+    if (!rec.autoPause && t - rec.langsamSeit >= 60000) { rec.autoPause = true; rec.fahrMs = Math.max(0, rec.fahrMs - (t - rec.langsamSeit)); }
+  } else {
+    rec.langsamSeit = null;
+    if (rec.autoPause && vs >= 5) rec.autoPause = false; // beim Losfahren automatisch weiter
+  }
+  // Höhenmeter (nur Anstiege > 5 m zählen, GPS-Höhe ist ungenau)
+  const hoehe = (typeof c.altitude === 'number' && isFinite(c.altitude)) ? c.altitude : null;
+  if (hoehe !== null) {
+    if (rec.hmRef === null) rec.hmRef = hoehe;
+    else if (hoehe > rec.hmRef + 5) { rec.hmGewinn += hoehe - rec.hmRef; rec.hmRef = hoehe; }
+    else if (hoehe < rec.hmRef - 5) rec.hmRef = hoehe;
+  }
+  // Punkt in die Spur übernehmen (im Stand nicht, sonst zählt GPS-Zittern als Strecke)
+  const letzter = rec.letzterTrackPunkt;
+  const d = letzter ? distanz(letzter, p) : 0;
+  if (!letzter || (vs >= 2.5 && d >= 2 && !rec.autoPause)) {
+    if (letzter) rec.distanz += d;
+    const pt = { lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), t, s: Math.round(vs * 10) / 10, a: hoehe === null ? null : Math.round(hoehe) };
+    rec.segmente[rec.segmente.length - 1].push(pt);
+    rec.letzterTrackPunkt = pt;
+    // Top-Speed erst, wenn mind. 3 Werte im Mittelwert stecken
+    if (rec.puffer.length >= 3 && vs > rec.maxSpeed) { rec.maxSpeed = vs; rec.maxSpeedPos = [pt.lat, pt.lon]; }
+  }
+  routeFortschritt(p);
+}
+function positionZeigen(p) {
+  if (!fahrKarte) return;
+  if (!posMarker) posMarker = L.circleMarker([p.lat, p.lon], { radius: 10, color: '#fff', weight: 3, fillColor: '#0b5cad', fillOpacity: 1, interactive: false }).addTo(fahrKarte);
+  else posMarker.setLatLng([p.lat, p.lon]);
+  if (folgen) fahrKarte.setView([p.lat, p.lon], Math.max(fahrKarte.getZoom(), 15), { animate: false });
+}
+// Restdistanz zur geplanten Route: nächster Punkt auf der Linie suchen
+function routeFortschritt(p) {
+  const r = aktiveRoute; if (!r) return;
+  const g = r.geometry, n = g.length;
+  let von = Math.max(0, r.idx - 30), bis = Math.min(n - 1, r.idx + 400);
+  if (!r.gefunden) { von = 0; bis = r.rundkurs ? Math.floor(n * 0.25) : n - 1; } // Rundkurs: nicht am Ende "ankommen"
+  let best = r.idx, bd = Infinity;
+  for (let i = von; i <= bis; i++) { const d = distanz(p, ll(g[i])); if (d < bd) { bd = d; best = i; } }
+  if (bd > 300 && r.gefunden && !r.rundkurs) { for (let i = 0; i < n; i++) { const d = distanz(p, ll(g[i])); if (d < bd) { bd = d; best = i; } } }
+  r.idx = best; r.gefunden = true; r.abseits = bd > 300;
+  r.rest = Math.max(0, r.geoLaenge - r.cum[best]);
+}
+// Fahrsperre: ab 10 km/h nur noch Pause/Stopp. Aufheben nach 5 s unter 10 km/h.
+function fahrsperrePruefen(vs) {
+  const t = jetzt();
+  if (rec && rec.zustand === 'faehrt' && vs >= 10) { sperreSeit = t; if (!fahrsperre) sperreSetzen(true); }
+  else if (fahrsperre && (!rec || rec.zustand !== 'faehrt' || t - sperreSeit > 5000)) sperreSetzen(false);
+}
+function sperreSetzen(an) {
+  fahrsperre = an;
+  document.body.classList.toggle('fahrsperre', an);
+  $('#sperrBanner').hidden = !an;
+  if (an) {
+    if (aktuellerTab !== 'fahren') zeigeTab('fahren');
+    if (!$('#sheet').hidden) sheetSchliessen();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+}
+
+// Läuft alle 0,5 s: Zeit zählen, Pausenerinnerung, Anzeige, Zwischenspeichern
+function tick() {
+  if (!rec) return;
+  const t = jetzt(), dt = Math.max(0, t - rec.letzterTick);
+  rec.letzterTick = t;
+  if (rec.zustand === 'faehrt' && !rec.autoPause) rec.fahrMs += dt;
+  if (rec.fahrMs >= rec.naechstePause) { rec.naechstePause += ZWEI_STUNDEN; pausenErinnerung(); }
+  if (rec.zustand === 'faehrt' && t - letzterFix > 15000) { rec.tempo = 0; gpsStatus('Kein GPS-Signal …', 'bad'); }
+  fahrsperrePruefen(rec.tempo);
+  fahrUIAktualisieren(false);
+  if (Date.now() - letztesSichern > 5000) { letztesSichern = Date.now(); aufzeichnungSichern(); }
+}
+function fahrUIAktualisieren(sofort) {
+  const r = rec;
+  $('#wTempo').textContent = r ? Math.round(r.tempo) : '0';
+  $('#wZeit').textContent = fmtUhr(r ? r.fahrMs : 0);
+  $('#wStrecke').textContent = zahl((r ? r.distanz : 0) / 1000, 1);
+  $('#wSchnitt').textContent = r && r.fahrMs > 30000 ? zahl(r.distanz / 1000 / (r.fahrMs / 3600000), 0) : '0';
+  $('#pauseStatus').hidden = !(r && (r.autoPause || r.zustand === 'pause'));
+  $('#pauseStatus').textContent = r && r.zustand === 'pause' ? 'Pausiert' : 'Auto-Pause';
+  // Geplante Route: Rest und Ankunft
+  $('#routeWerte').hidden = !aktiveRoute;
+  if (aktiveRoute) {
+    const rest = aktiveRoute.rest == null ? aktiveRoute.geoLaenge : aktiveRoute.rest;
+    $('#wRest').textContent = zahl(rest / 1000, 1);
+    $('#wRestLabel').textContent = aktiveRoute.abseits ? 'Rest km (abseits!)' : 'Rest km';
+    if (r) {
+      const f = zeitFaktor();
+      const sek = aktiveRoute.duration * (rest / aktiveRoute.geoLaenge) * (f ? f.faktor : 1);
+      $('#wAnkunft').textContent = fmtZeit(jetzt() + sek * 1000);
+    } else $('#wAnkunft').textContent = fmtDauer(aktiveRoute.duration * 1000);
+  }
+  // Schräglage
+  $('#leanWerte').hidden = !einst.schraeglage;
+  if (einst.schraeglage) {
+    $('#wLean').textContent = lean.roh === null ? '–' : `${Math.abs(Math.round(lean.wert))}° ${lean.wert < -1 ? 'L' : lean.wert > 1 ? 'R' : ''}`;
+    $('#wLeanMax').textContent = r ? `${Math.round(r.leanL)}° / ${Math.round(r.leanR)}°` : '–';
+  }
+  if (r) $('#btnPause').innerHTML = r.zustand === 'pause' ? '▶<span>Weiter</span>' : '⏸<span>Pause</span>';
+  // Spur auf der Karte (gedrosselt, damit es flüssig bleibt)
+  if (trackLinie && r && (sofort || Date.now() - linieZuletzt > 1500)) {
+    linieZuletzt = Date.now();
+    trackLinie.setLatLngs(r.segmente.map(s => s.map(p => [p.lat, p.lon])));
+  }
+}
+function steuerungAnzeigen() {
+  document.body.classList.toggle('aufnahme', !!rec);
+  const h = $('#btnHaupt');
+  h.textContent = rec ? '■ STOPP' : '▶ START';
+  h.classList.toggle('start', !rec); h.classList.toggle('stopp', !!rec);
+  h.setAttribute('aria-label', rec ? 'Fahrt beenden' : 'Fahrt starten');
+  $('#btnPause').hidden = !rec;
+  $('#btnDemo').disabled = !!rec;
+}
+// Großer Knopf: Start ↔ Stopp. Sperre gegen Doppeltippen (z. B. mit Handschuhen).
+let hauptGesperrtBis = 0;
+function hauptKnopf() {
+  if (Date.now() < hauptGesperrtBis) return;
+  hauptGesperrtBis = Date.now() + 1000;
+  if (rec) fahrtStoppen(); else fahrtStarten(false);
+}
+
+// --- Pause / Weiter / Stopp ---
+function pauseUmschalten() {
+  if (!rec) return;
+  if (rec.zustand === 'faehrt') { rec.zustand = 'pause'; rec.autoPause = false; sperreSetzen(false); }
+  else {
+    rec.zustand = 'faehrt'; rec.letzterTick = jetzt();
+    rec.letzterTrackPunkt = null; rec.letzterSpeedFix = null; rec.puffer = []; rec.langsamSeit = null;
+    if (rec.segmente[rec.segmente.length - 1].length) rec.segmente.push([]); // neues Teilstück, keine Luftlinie
+  }
+  fahrUIAktualisieren(true); aufzeichnungSichern();
+}
+async function fahrtStoppen() {
+  if (!rec) return;
+  const ok = await dialog({ titel: 'Fahrt beenden?', html: '<p>Die Aufzeichnung wird beendet und gespeichert.</p>', knoepfe: [{ text: 'Weiterfahren', wert: false }, { text: 'Beenden', wert: true, art: 'danger' }] });
+  if (ok && rec) await fahrtAbschliessen();
+}
+function aufzeichnungBeendenTechnisch() {
+  gpsStoppen(); demoStoppen(); wakeLockFreigeben();
+  if (aktiveRoute) { aktiveRoute.rest = null; aktiveRoute.idx = 0; aktiveRoute.gefunden = false; aktiveRoute.abseits = false; }
+  clearInterval(tickTimer); tickTimer = null;
+  sperreSetzen(false); gpsStatus('GPS aus', '');
+}
+async function fahrtAbschliessen(endeVorgabe) {
+  const r = rec; if (!r) return;
+  const ende = endeVorgabe || jetzt();
+  rec = null; uhr.demo = null;
+  aufzeichnungBeendenTechnisch();
+  await Speicher.loesche('kv', 'aktiveFahrt');
+  steuerungAnzeigen();
+  const f = fahrtObjekt(r, ende);
+  if (f.distance < 50) {
+    const behalten = await dialog({ titel: 'Sehr kurze Fahrt', html: `<p>Nur ${zahl(f.distance, 0)} m aufgezeichnet. Trotzdem speichern?</p>`, knoepfe: [{ text: 'Verwerfen', wert: false }, { text: 'Speichern', wert: true, art: 'primary' }] });
+    if (!behalten) { fahrUIAktualisieren(true); return; }
+  }
+  await fahrtSpeichern(f);
+  fahrUIAktualisieren(true);
+  zeigeAuswertung(f);
+}
+async function aufzeichnungVerwerfen() {
+  rec = null; uhr.demo = null;
+  aufzeichnungBeendenTechnisch();
+  await Speicher.loesche('kv', 'aktiveFahrt');
+  steuerungAnzeigen(); fahrUIAktualisieren(true);
+}
+function fahrtObjekt(r, ende) {
+  return {
+    id: r.id, name: (r.demo ? 'Demo-Fahrt ' : 'Fahrt ') + new Date(r.start).toLocaleDateString('de-DE') + ', ' + fmtZeit(r.start),
+    demo: !!r.demo, start: r.start, ende, distance: Math.round(r.distanz), fahrMs: Math.round(r.fahrMs),
+    gesamtMs: Math.max(0, ende - r.start), maxSpeed: Math.round(r.maxSpeed * 10) / 10, maxSpeedPos: r.maxSpeedPos,
+    schnitt: r.fahrMs > 0 ? r.distanz / 1000 / (r.fahrMs / 3600000) : 0, hm: Math.round(r.hmGewinn),
+    segmente: r.segmente.filter(s => s.length), plan: r.plan, bikeId: r.bikeId,
+    leanL: Math.round(r.leanL), leanR: Math.round(r.leanR)
+  };
+}
+async function fahrtSpeichern(f) {
+  await Speicher.setze('rides', f);
+  cache.rides = cache.rides.filter(x => x.id !== f.id).concat(f);
+  // Kilometerstand hochzählen (Demo-Fahrten zählen nicht)
+  if (!f.demo && f.bikeId) {
+    const b = cache.bikes.find(x => x.id === f.bikeId);
+    if (b) { b.km = Math.round(((b.km || 0) + f.distance / 1000) * 10) / 10; await Speicher.setze('bikes', b); wartungsHinweis(true); }
+  }
+}
+// Laufende Fahrt zwischenspeichern (für "Fahrt fortsetzen?" nach Absturz)
+function aufzeichnungSichern() { if (rec && !rec.demo) Speicher.setze('kv', rec, 'aktiveFahrt'); }
+
+// --- Bildschirm wachhalten (Screen Wake Lock API) ---
+async function wakeLockAnfordern() {
+  if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    $('#wakeStatus').hidden = false;
+    wakeLock.addEventListener('release', () => { $('#wakeStatus').hidden = true; });
+  } catch (e) { $('#wakeStatus').hidden = true; /* z. B. Akku-Sparmodus */ }
+}
+function wakeLockFreigeben() { try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null; $('#wakeStatus').hidden = true; }
+document.addEventListener('visibilitychange', () => {
+  if (!rec) return;
+  if (document.visibilityState === 'visible') wakeLockAnfordern(); // bei Rückkehr neu anfordern
+  else aufzeichnungSichern();
+});
+window.addEventListener('beforeunload', e => { if (rec && !rec.demo) { aufzeichnungSichern(); e.preventDefault(); e.returnValue = ''; } });
+
+// --- Pausenerinnerung (Ton + Anzeige + Vibration) ---
+function audioStarten() {
+  try {
+    if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}
+function piep() {
+  if (!audioCtx) return;
+  try {
+    const t0 = audioCtx.currentTime;
+    [0, 0.35, 0.7].forEach(o => {
+      const os = audioCtx.createOscillator(), g = audioCtx.createGain();
+      os.type = 'square'; os.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t0 + o);
+      g.gain.exponentialRampToValueAtTime(0.35, t0 + o + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + o + 0.25);
+      os.connect(g); g.connect(audioCtx.destination);
+      os.start(t0 + o); os.stop(t0 + o + 0.3);
+    });
+  } catch (e) {}
+}
+function pausenErinnerung() {
+  $('#pausenBanner').hidden = false;
+  piep();
+  try { if (navigator.vibrate) navigator.vibrate([400, 150, 400]); } catch (e) {}
+}
+
+// --- Standort teilen (Web Share API) ---
+async function standortTeilen() {
+  let p = letztePosition && jetzt() - letztePosition.t < 120000 ? letztePosition : null;
+  if (!p) {
+    try { toast('Standort wird bestimmt …'); p = await aktuellePosition(); }
+    catch (e) { return dialog({ titel: 'Standort teilen', html: `<p>${esc(e.message)}</p>` }); }
+  }
+  const la = p.lat.toFixed(5), lo = p.lon.toFixed(5);
+  const url = `https://www.openstreetmap.org/?mlat=${la}&mlon=${lo}#map=16/${la}/${lo}`;
+  const text = 'Mein aktueller Standort:';
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Mein Standort', text, url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(text + ' ' + url); toast('Link kopiert – jetzt z. B. in WhatsApp einfügen.'); }
+  catch (e) { dialog({ titel: 'Standort-Link', html: `<p>Kopiere diesen Link:</p><input readonly value="${esc(url)}" onclick="this.select()">` }); }
+}
+
+// --- Nach Absturz: "Fahrt fortsetzen?" ---
+async function absturzPruefen() {
+  const a = await Speicher.hole('kv', 'aktiveFahrt');
+  if (!a || !Array.isArray(a.segmente)) return;
+  const wahl = await dialog({
+    titel: 'Fahrt fortsetzen?',
+    html: `<p>Eine Aufzeichnung vom ${fmtDatum(a.start)}, ${fmtZeit(a.start)} Uhr (${fmtKm(a.distanz)}) wurde nicht beendet – zum Beispiel weil der Browser geschlossen wurde.</p>`,
+    knoepfe: [{ text: 'Verwerfen', wert: 'weg', art: 'danger-outline' }, { text: 'Beenden & speichern', wert: 'save' }, { text: 'Fortsetzen', wert: 'weiter', art: 'primary' }]
+  });
+  if (wahl === 'weg') {
+    if (await frage('Wirklich verwerfen?', 'Die Aufzeichnung geht dabei verloren.', 'Verwerfen', 'danger')) { await Speicher.loesche('kv', 'aktiveFahrt'); return; }
+    return absturzPruefen();
+  }
+  rec = a;
+  if (a.plan && a.plan.routeId) { const r = cache.routes.find(x => x.id === a.plan.routeId); if (r) { const p = a.plan; setAktiveRoute(r); rec.plan = p; } }
+  if (wahl === 'save') {
+    const segs = a.segmente.filter(s => s.length);
+    const letzteZeit = segs.length ? segs[segs.length - 1].slice(-1)[0].t : a.letzterTick;
+    return fahrtAbschliessen(Math.max(letzteZeit || a.start, a.start));
+  }
+  // Fortsetzen
+  rec.zustand = 'faehrt'; rec.letzterTick = jetzt(); rec.letzterTrackPunkt = null; rec.letzterSpeedFix = null;
+  rec.puffer = []; rec.langsamSeit = null; rec.autoPause = false;
+  if (rec.segmente.length && rec.segmente[rec.segmente.length - 1].length) rec.segmente.push([]);
+  if (!rec.segmente.length) rec.segmente.push([]);
+  letzterFix = jetzt();
+  audioStarten();
+  zeigeTab('fahren');
+  if (window.isSecureContext && 'geolocation' in navigator) gpsStarten(); else gpsStatus('GPS nicht verfügbar', 'bad');
+  tickTimer = setInterval(tick, 500);
+  steuerungAnzeigen(); fahrUIAktualisieren(true);
+  await wakeLockAnfordern();
+}
+
+/* ===================== 10) DEMO-FAHRT (Fake-GPS) ===================== */
+// Spielt eine Fahrt mit künstlichen GPS-Punkten ab – zum Testen am PC.
+// Enthält absichtlich: einen Stopp (für Auto-Pause), einen schnellen Abschnitt (Top-Speed),
+// ungenaue Punkte und einen GPS-Sprung (beides muss der Filter verwerfen).
+let demo = null;
+function demoVorbereiten() {
+  let pfad;
+  if (aktiveRoute && aktiveRoute.geometry.length > 1) pfad = aktiveRoute.geometry;
+  else {
+    const m = letztePosition || plan.start || (fahrKarte ? { lat: fahrKarte.getCenter().lat, lon: fahrKarte.getCenter().lng } : { lat: 51.1657, lon: 10.4515 });
+    pfad = demoSchleife(m);
+  }
+  const cum = kumuliert(pfad), gesamt = cum[cum.length - 1] || 1;
+  const virtSek = gesamt / (60 / 3.6) + 90;           // grob: Ø 60 km/h + Stopp
+  const faktor = Math.min(60, Math.max(10, virtSek / 90)); // ca. 90 s echte Laufzeit
+  const t0 = Date.now();
+  uhr.demo = { realStart: t0, virtStart: t0, faktor };
+  demo = { pfad, cum, gesamt, d: 0, v: 8, letzt: t0, stoppBis: null, gestoppt: false, n: 0, timer: null };
+}
+function demoSchleife(m) {
+  // Kurvige Schleife (ca. 18 km), die am Punkt m beginnt und endet
+  const r = 2.6, mitte = zielpunkt(m, 0, r), pts = [];
+  for (let w = 0; w <= 360; w += 3) {
+    const rr = r * (1 + 0.22 * Math.sin(rad(w * 5))) + 0.15 * Math.sin(rad(w * 13));
+    const q = zielpunkt(mitte, 180 + w, rr); pts.push([q.lat, q.lon]);
+  }
+  return pts;
+}
+function punktAufPfad(pfad, cum, d) {
+  let lo = 0, hi = cum.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid; }
+  const seg = cum[hi] - cum[lo], f = seg > 0 ? (d - cum[lo]) / seg : 0;
+  return { lat: pfad[lo][0] + (pfad[hi][0] - pfad[lo][0]) * f, lon: pfad[lo][1] + (pfad[hi][1] - pfad[lo][1]) * f };
+}
+function demoStarten() { gpsStatus('Demo-GPS', 'warn'); demo.timer = setInterval(demoSchritt, 100); }
+function demoStoppen() { if (demo && demo.timer) clearInterval(demo.timer); demo = null; }
+function demoSchritt() {
+  if (!demo || !rec) return;
+  const t = jetzt(), dt = Math.min(10, (t - demo.letzt) / 1000);
+  demo.letzt = t;
+  const f = demo.d / demo.gesamt;
+  let ziel;
+  if (demo.stoppBis) { if (t < demo.stoppBis) ziel = 0; else { demo.stoppBis = null; ziel = 30; } }
+  else if (!demo.gestoppt && f >= 0.45) { demo.gestoppt = true; demo.stoppBis = t + 75000; ziel = 0; } // 75 s Stopp
+  else if (f > 0.66 && f < 0.72) ziel = 128;
+  else if (f > 0.96) ziel = 25;
+  else ziel = 45 + 40 * Math.abs(Math.sin(f * Math.PI * 5));
+  // sanft beschleunigen (max. 3 m/s²) und bremsen (max. 4,5 m/s²)
+  const diff = ziel / 3.6 - demo.v, max = 3 * dt;
+  demo.v += Math.max(-max * 1.5, Math.min(max, diff));
+  if (ziel === 0 && demo.v < 0.4) demo.v = 0;
+  demo.d = Math.min(demo.gesamt, demo.d + demo.v * dt);
+  const pos = punktAufPfad(demo.pfad, demo.cum, demo.d);
+  demo.n++;
+  let acc = 4 + Math.random() * 5, lat = pos.lat + (Math.random() - 0.5) * 0.00002, lon = pos.lon + (Math.random() - 0.5) * 0.00002;
+  if (demo.n % 37 === 0) acc = 40;     // ungenauer Punkt → Filter
+  if (demo.n === 50) lat += 0.05;      // GPS-Sprung (~5 km) → Filter
+  const speed = demo.n % 10 === 0 ? null : Math.max(0, demo.v + (Math.random() - 0.5) * 0.6); // manchmal kein Tempo-Wert
+  fixVerarbeiten({ timestamp: t, coords: { latitude: lat, longitude: lon, accuracy: acc, speed, altitude: 60 + 40 * Math.sin(f * Math.PI * 2) + (Math.random() - 0.5) * 2 } });
+  if (demo && demo.d >= demo.gesamt) { demoStoppen(); if (rec) fahrtAbschliessen(); }
+}
+
+/* ===================== 11) AUSWERTUNG ===================== */
+function allzeitRekord() { return cache.rides.filter(f => !f.demo).reduce((m, f) => (!m || f.maxSpeed > m.maxSpeed) ? f : m, null); }
+function statGrid(f) {
+  return `<div class="stat-grid">
+    <div><b>${fmtKm(f.distance)}</b><span>Strecke</span></div>
+    <div><b>${zahl(f.schnitt, 0)} km/h</b><span>Ø-Tempo</span></div>
+    <div><b>${fmtUhr(f.fahrMs)}</b><span>Fahrzeit (ohne Pausen)</span></div>
+    <div><b>${fmtUhr(f.gesamtMs)}</b><span>Gesamtzeit (mit Pausen)</span></div>
+    <div><b>${zahl(f.hm, 0)} m</b><span>Höhenmeter (GPS, ungenau)</span></div>
+    ${f.leanL || f.leanR ? `<div><b>${f.leanL}° / ${f.leanR}°</b><span>Schräglage L/R (Schätzung)</span></div>` : ''}
+  </div>`;
+}
+function vergleichHTML(f) {
+  if (!f.plan || !f.plan.duration) {
+    return `<div class="card vergleich"><h3>Geplant vs. echt</h3><p class="klein">Fahrt ohne Planung – nur echte Zeiten.</p>
+      <div class="vgl-zeile"><span>Fahrzeit (ohne Pausen)</span><b>${fmtDauer(f.fahrMs)}</b></div>
+      <div class="vgl-zeile"><span>Gesamtzeit (mit Pausen)</span><b>${fmtDauer(f.gesamtMs)}</b></div></div>`;
+  }
+  const geplant = f.plan.duration * 1000, diff = f.fahrMs - geplant, pct = diff / geplant * 100;
+  const vz = diff > 0 ? '+' : diff < 0 ? '−' : '±';
+  const abw = f.plan.distance ? f.distance / f.plan.distance : 1;
+  return `<div class="card vergleich"><h3>Geplant vs. echt</h3>
+    <div class="vgl-zeile"><span>Geplante Zeit</span><b>${fmtDauer(geplant)}</b></div>
+    <div class="vgl-zeile"><span>Echte Fahrzeit (ohne Pausen)</span><b>${fmtDauer(f.fahrMs)}</b></div>
+    <div class="vgl-zeile"><span>Gesamtzeit (mit Pausen)</span><b>${fmtDauer(f.gesamtMs)}</b></div>
+    <div class="vgl-diff ${diff <= 0 ? 'good' : 'bad'}">${vz}${Math.round(Math.abs(diff) / 60000)} min (${vz}${zahl(Math.abs(pct), 1)} %) – ${diff <= 0 ? 'schneller' : 'langsamer'} als geplant</div>
+    ${abw < 0.8 || abw > 1.25 ? `<p class="klein">⚠️ Gefahren: ${fmtKm(f.distance)}, geplant: ${fmtKm(f.plan.distance)}. Vergleich nur bedingt aussagekräftig – zählt nicht für deinen Zeitfaktor.</p>` : ''}
+    ${f.demo ? '<p class="klein">Demo-Fahrten zählen nicht für den Zeitfaktor.</p>' : ''}
+  </div>`;
+}
+async function zeigeAuswertung(f) {
+  const rekord = allzeitRekord();
+  const neu = !f.demo && rekord && rekord.id === f.id && cache.rides.filter(x => !x.demo).length > 1;
+  const wahl = await dialog({
+    titel: 'Fahrt beendet',
+    html: `<div class="topspeed"><span>Top-Speed dieser Fahrt</span><b>${zahl(f.maxSpeed, 0)}<small> km/h</small></b><em>GPS-Wert, kann vom Tacho abweichen.</em>${neu ? '<span class="pill good">Neuer Allzeit-Höchstwert</span>' : ''}</div>
+      ${statGrid(f)}${vergleichHTML(f)}
+      ${f.demo ? '<p class="klein">Demo-Fahrten zählen nicht in Statistik und Kilometerstand.</p>' : ''}`,
+    knoepfe: [{ text: 'Schließen', wert: false }, { text: 'Details & Karte', wert: true, art: 'primary' }]
+  });
+  if (wahl) { zeigeTab('fahrten'); fahrtDetail(f.id); }
+}
+
+/* ===================== 12) FAHRTEN-VERLAUF ===================== */
+function renderFahrten() {
+  const el = $('#fahrtenInhalt');
+  const echte = cache.rides.filter(f => !f.demo);
+  const d = new Date();
+  const summe = ab => echte.filter(f => f.start >= ab).reduce((s, f) => s + f.distance, 0);
+  const laengste = echte.reduce((m, f) => (!m || f.distance > m.distance) ? f : m, null);
+  const schnellste = echte.filter(f => f.distance > 1000).reduce((m, f) => (!m || f.schnitt > m.schnitt) ? f : m, null);
+  const rekord = allzeitRekord(), fz = zeitFaktor();
+  let html = `<h2>Fahrten</h2>
+    <div class="stat-grid drei">
+      <div><b>${fmtKm(summe(wochenStart()))}</b><span>diese Woche</span></div>
+      <div><b>${fmtKm(summe(new Date(d.getFullYear(), d.getMonth(), 1).getTime()))}</b><span>dieser Monat</span></div>
+      <div><b>${fmtKm(summe(new Date(d.getFullYear(), 0, 1).getTime()))}</b><span>dieses Jahr</span></div>
+      <div><b>${laengste ? fmtKm(laengste.distance) : '–'}</b><span>längste Fahrt</span></div>
+      <div><b>${schnellste ? zahl(schnellste.schnitt, 0) + ' km/h' : '–'}</b><span>schnellste Fahrt (Ø)</span></div>
+      <div><b>${rekord ? zahl(rekord.maxSpeed, 0) + ' km/h' : '–'}</b><span>Top-Speed allzeit (GPS)</span></div>
+    </div>
+    <p class="klein">${fz ? `Dein Zeitfaktor: ${fz.faktor >= 1 ? '+' : '−'}${zahl(Math.abs(fz.faktor - 1) * 100, 0)} % (${fz.faktor >= 1 ? 'langsamer' : 'schneller'} als die Schätzung, aus ${fz.anzahl} Fahrt${fz.anzahl > 1 ? 'en' : ''}).` : 'Dein Zeitfaktor erscheint nach der ersten Fahrt mit geplanter Route.'}</p>`;
+  const liste = [...cache.rides].sort((a, b) => b.start - a.start);
+  if (!liste.length) html += '<div class="leer">Noch keine Fahrten. Starte eine im Tab „Fahren“ – oder teste mit der Demo-Fahrt (🧪).</div>';
+  liste.forEach(f => {
+    html += `<button class="fahrt-btn" data-id="${f.id}">
+      <div class="row"><b class="grow">${esc(f.name)}</b>${f.demo ? '<span class="pill warn">Demo</span>' : ''}</div>
+      <div class="klein">${fmtDatum(f.start)}${f.plan ? ' · Route: ' + esc(f.plan.name) : ''}</div>
+      <div class="fahrt-zahlen"><span>${fmtKm(f.distance)}</span><span>${fmtDauer(f.fahrMs)}</span><span>Top ${zahl(f.maxSpeed, 0)} km/h</span><span>Ø ${zahl(f.schnitt, 0)} km/h</span><span>${zahl(f.hm, 0)} Hm</span></div>
+    </button>`;
+  });
+  if (liste.length) html += '<p class="klein">Höhenmeter aus GPS sind ungenau. Top-Speed ist ein GPS-Wert und kann vom Tacho abweichen. Demo-Fahrten zählen nicht in der Statistik.</p>';
+  el.innerHTML = html;
+  $$('.fahrt-btn', el).forEach(b => b.onclick = () => fahrtDetail(b.dataset.id));
+}
+function fahrtDetail(id) {
+  const f = cache.rides.find(x => x.id === id); if (!f) return;
+  const optionen = '<option value="">Kein Motorrad</option>' + cache.bikes.map(b => `<option value="${b.id}" ${b.id === f.bikeId ? 'selected' : ''}>${esc(b.name)}</option>`).join('');
+  sheetOeffnen(f.name, `
+    <div id="detailKarte" class="karte karte-detail"></div>
+    <div class="topspeed"><span>Top-Speed</span><b>${zahl(f.maxSpeed, 0)}<small> km/h</small></b><em>GPS-Wert, kann vom Tacho abweichen. ⚡ auf der Karte = Stelle des Top-Speeds.</em></div>
+    ${statGrid(f)}
+    <h3>Tempo über die Strecke</h3>
+    <canvas id="tempoChart" class="chart"></canvas>
+    ${vergleichHTML(f)}
+    <label class="lbl" for="detailBike">Motorrad</label>
+    <select id="detailBike" ${f.demo ? 'disabled' : ''}>${optionen}</select>
+    ${f.demo ? '<p class="klein">Demo-Fahrten werden keinem Motorrad zugerechnet.</p>' : ''}
+    <div class="row mt"><button class="btn grow" id="dName">✏️ Umbenennen</button><button class="btn grow" id="dGpx">GPX exportieren</button></div>
+    <button class="btn danger-outline block mt" id="dWeg">🗑️ Fahrt löschen</button>`);
+  setTimeout(() => { detailKarteZeichnen(f); zeichneTempo($('#tempoChart'), f); }, 80);
+  $('#dGpx').onclick = () => herunterladen(dateiName(f.name) + '.gpx', gpxAusFahrt(f), 'application/gpx+xml');
+  $('#dName').onclick = async () => {
+    const n = await eingabe('Fahrt umbenennen', 'Neuer Name', f.name); if (n === null) return;
+    f.name = n.trim() || f.name; await Speicher.setze('rides', f); $('#sheetTitel').textContent = f.name; renderFahrten();
+  };
+  $('#dWeg').onclick = async () => {
+    if (!await frage('Fahrt löschen?', `„${esc(f.name)}“ wirklich löschen? Das kann nicht rückgängig gemacht werden. Der Kilometerstand des Motorrads bleibt gleich.`, 'Löschen', 'danger')) return;
+    await Speicher.loesche('rides', f.id); cache.rides = cache.rides.filter(x => x.id !== f.id);
+    sheetSchliessen(); renderFahrten(); toast('Fahrt gelöscht.');
+  };
+  $('#detailBike').onchange = async e => {
+    const neu = e.target.value || null, km = f.distance / 1000;
+    const alt = cache.bikes.find(b => b.id === f.bikeId), nb = cache.bikes.find(b => b.id === neu);
+    if (alt) { alt.km = Math.max(0, Math.round((alt.km - km) * 10) / 10); await Speicher.setze('bikes', alt); }
+    if (nb) { nb.km = Math.round((nb.km + km) * 10) / 10; await Speicher.setze('bikes', nb); }
+    f.bikeId = neu; await Speicher.setze('rides', f);
+    toast('Motorrad geändert, Kilometerstand angepasst.'); wartungsHinweis(true);
+  };
+}
+function detailKarteZeichnen(f) {
+  if ($('#sheet').hidden) return;
+  if (detailKarte) { try { detailKarte.remove(); } catch (e) {} detailKarte = null; }
+  detailKarte = karteErstellen('detailKarte');
+  if (!detailKarte) return;
+  const route = f.plan && f.plan.routeId ? cache.routes.find(r => r.id === f.plan.routeId) : null;
+  if (route) L.polyline(route.geometry, { color: farbe('--route'), weight: 5, opacity: 0.6, dashArray: '10 8', interactive: false }).addTo(detailKarte);
+  const segs = (f.segmente || []).map(s => s.map(p => [p.lat, p.lon])).filter(s => s.length);
+  if (!segs.length) return;
+  const linie = L.polyline(segs, { color: farbe('--track'), weight: 5 }).addTo(detailKarte);
+  L.marker(segs[0][0], { icon: pinIcon('S', 'pin-start'), keyboard: false }).addTo(detailKarte);
+  L.marker(segs[segs.length - 1][segs[segs.length - 1].length - 1], { icon: pinIcon('Z', 'pin-ziel'), keyboard: false }).addTo(detailKarte);
+  if (f.maxSpeedPos) L.marker(f.maxSpeedPos, { icon: pinIcon('⚡', 'pin-top'), keyboard: false }).addTo(detailKarte).bindTooltip(`Top-Speed ${zahl(f.maxSpeed, 0)} km/h (GPS)`);
+  try { detailKarte.fitBounds(linie.getBounds(), { padding: [25, 25] }); } catch (e) {}
+}
+// Tempo-Diagramm (Canvas, ohne Bibliothek)
+function zeichneTempo(cv, f) {
+  if (!cv || !cv.getContext) return;
+  const ctx = cv.getContext('2d'); if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 320, h = cv.clientHeight || 200;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const pts = []; let d = 0;
+  (f.segmente || []).forEach(seg => seg.forEach((p, i) => { if (i > 0) d += distanz(seg[i - 1], p); pts.push([d / 1000, p.s || 0]); }));
+  ctx.font = '13px system-ui, sans-serif';
+  if (pts.length < 2) { ctx.fillStyle = farbe('--muted'); ctx.fillText('Zu wenige Messpunkte für ein Diagramm.', 12, 30); return; }
+  const L0 = 38, R0 = 10, T0 = 12, B0 = 26;
+  const maxX = pts[pts.length - 1][0] || 1;
+  const spitze = pts.reduce((m, p) => p[1] > m[1] ? p : m, pts[0]);
+  const maxY = Math.max(40, Math.ceil(spitze[1] / 20) * 20);
+  const x = v => L0 + (w - L0 - R0) * v / maxX, y = v => T0 + (h - T0 - B0) * (1 - v / maxY);
+  // Raster
+  ctx.strokeStyle = farbe('--line'); ctx.fillStyle = farbe('--muted'); ctx.lineWidth = 1;
+  const schritt = maxY > 160 ? 40 : 20;
+  for (let v = 0; v <= maxY; v += schritt) { ctx.beginPath(); ctx.moveTo(L0, y(v)); ctx.lineTo(w - R0, y(v)); ctx.stroke(); ctx.fillText(String(v), 4, y(v) + 4); }
+  [0, maxX / 2, maxX].forEach((v, i) => { const txt = zahl(v, 1) + ' km'; const tw = ctx.measureText(txt).width; ctx.fillText(txt, Math.min(w - tw - 2, Math.max(L0, x(v) - (i ? tw / 2 : 0))), h - 6); });
+  // Linie
+  ctx.strokeStyle = istDunkel() ? farbe('--accent') : farbe('--info'); ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(x(p[0]), y(p[1])) : ctx.moveTo(x(p[0]), y(p[1]))); ctx.stroke();
+  // Spitze markieren
+  ctx.fillStyle = farbe('--bad'); ctx.beginPath(); ctx.arc(x(spitze[0]), y(spitze[1]), 5, 0, Math.PI * 2); ctx.fill();
+}
+
+/* ===================== 13) GARAGE ===================== */
+function wartungStatus(b, w) {
+  const gefahren = (b.km || 0) - (w.zuletzt || 0), rest = w.intervall - gefahren;
+  const pct = Math.max(0, Math.min(100, gefahren / w.intervall * 100));
+  return { rest, pct, kl: rest <= 0 ? 'bad' : rest < w.intervall * 0.1 ? 'warn' : '' };
+}
+function wartungHTML(b) {
+  if (!b.wartung || !b.wartung.length) return '<p class="klein">Keine Wartungserinnerungen eingerichtet.</p>';
+  return b.wartung.map(w => {
+    const s = wartungStatus(b, w);
+    return `<div class="wartung">
+      <div class="row"><span class="grow"><b>${esc(w.name)}</b> <span class="klein">alle ${zahl(w.intervall, 0)} km</span></span><button class="btn" data-a="erledigt" data-id="${b.id}" data-w="${w.id}">✓ Erledigt</button></div>
+      <div class="balken"><i class="${s.kl}" style="width:${s.pct}%"></i></div>
+      <div class="klein ${s.kl ? 'txt-' + s.kl : ''}">${s.rest <= 0 ? `Fällig! (${zahl(-s.rest, 0)} km drüber)` : `noch ${zahl(s.rest, 0)} km`}</div>
+    </div>`;
+  }).join('');
+}
+function renderGarage() {
+  const el = $('#garageInhalt');
+  let html = '<h2>Garage</h2>';
+  if (!cache.bikes.length) html += '<div class="leer">Noch kein Motorrad angelegt. Mit Tankgröße und Verbrauch bekommst du eine Reichweiten-Warnung beim Planen.</div>';
+  cache.bikes.forEach(b => {
+    const rw = reichweite(b), aktiv = einst.aktivesBike === b.id;
+    html += `<div class="card bike ${aktiv ? 'aktiv' : ''}">
+      <div class="row"><h3 class="grow" style="margin:0">🏍️ ${esc(b.name)}</h3>${aktiv ? '<span class="pill good">aktiv</span>' : ''}</div>
+      <div class="stat-grid">
+        <div><b>${zahl(b.km || 0, 0)} km</b><span>Kilometerstand</span></div>
+        <div><b>${rw ? 'ca. ' + zahl(rw, 0) + ' km' : '–'}</b><span>Tankreichweite</span></div>
+        <div><b>${b.tank ? zahl(b.tank, 1) + ' l' : '–'}</b><span>Tankgröße</span></div>
+        <div><b>${b.verbrauch ? zahl(b.verbrauch, 1) : '–'}</b><span>Verbrauch l/100 km</span></div>
+      </div>
+      ${wartungHTML(b)}
+      <div class="row wrap mt">${aktiv ? '' : `<button class="btn primary grow" data-a="aktiv" data-id="${b.id}">Als aktiv wählen</button>`}<button class="btn grow" data-a="edit" data-id="${b.id}">✏️ Bearbeiten</button></div>
+    </div>`;
+  });
+  html += '<button class="btn primary block gross" id="btnBikeNeu">＋ Motorrad hinzufügen</button><p class="klein">Neue Fahrten werden dem aktiven Motorrad zugeordnet, der Kilometerstand zählt automatisch hoch.</p>';
+  el.innerHTML = html;
+  $('#btnBikeNeu').onclick = () => bikeFormular(null);
+}
+async function garageAktion(a, id, wid) {
+  const b = cache.bikes.find(x => x.id === id); if (!b) return;
+  if (a === 'aktiv') { einst.aktivesBike = id; await einstSpeichern(); renderGarage(); fahrBikeAnzeigen(); toast(`${b.name} ist jetzt aktiv.`); }
+  else if (a === 'edit') bikeFormular(id);
+  else if (a === 'erledigt') {
+    const w = b.wartung.find(x => x.id === wid); if (!w) return;
+    if (!await frage('Wartung erledigt?', `„${esc(w.name)}“ bei ${zahl(b.km, 0)} km als erledigt markieren?`, 'Erledigt')) return;
+    w.zuletzt = b.km || 0; await Speicher.setze('bikes', b); renderGarage(); wartungsHinweis(false);
+  }
+}
+function bikeFormular(id) {
+  const vorhanden = id ? cache.bikes.find(x => x.id === id) : null;
+  const daten = vorhanden ? klon(vorhanden) : { id: uid(), name: '', km: 0, tank: 15, verbrauch: 5, wartung: [{ id: uid(), name: 'Ölwechsel', intervall: 6000, zuletzt: null }, { id: uid(), name: 'Kette spannen & schmieren', intervall: 1000, zuletzt: null }] };
+  sheetOeffnen(vorhanden ? 'Motorrad bearbeiten' : 'Neues Motorrad', `
+    <label class="lbl" for="bName">Name</label><input id="bName" value="${esc(daten.name)}" placeholder="z. B. MT-07" maxlength="40">
+    <label class="lbl" for="bKm">Kilometerstand (km)</label><input id="bKm" inputmode="decimal" value="${zahl(daten.km, 0).replace(/\./g, '')}">
+    <div class="row"><div class="grow"><label class="lbl" for="bTank">Tankgröße (l)</label><input id="bTank" inputmode="decimal" value="${String(daten.tank ?? '').replace('.', ',')}"></div>
+    <div class="grow"><label class="lbl" for="bVerbr">Verbrauch (l/100 km)</label><input id="bVerbr" inputmode="decimal" value="${String(daten.verbrauch ?? '').replace('.', ',')}"></div></div>
+    <h3 class="mt" style="margin-top:20px">Wartungserinnerungen</h3>
+    <p class="klein">„Zuletzt bei“ leer lassen = ab aktuellem Kilometerstand.</p>
+    <div id="wartListe"></div>
+    <button class="btn block mt" id="btnWartNeu">＋ Erinnerung hinzufügen</button>
+    <button class="btn primary block gross mt" id="btnBikeSpeichern">Speichern</button>
+    ${vorhanden ? '<button class="btn danger-outline block mt" id="btnBikeWeg">🗑️ Motorrad löschen</button>' : ''}`);
+  const wartSync = () => {
+    $$('.wart-zeile').forEach(z => {
+      const w = daten.wartung[+z.dataset.i]; if (!w) return;
+      w.name = $('.wName', z).value; w.intervall = zahlLesen($('.wInt', z).value);
+      const zl = $('.wZul', z).value.trim(); w.zuletzt = zl === '' ? null : zahlLesen(zl);
+    });
+  };
+  const wartRender = () => {
+    $('#wartListe').innerHTML = daten.wartung.map((w, i) => `<div class="wart-zeile" data-i="${i}">
+      <div class="ganz"><label class="lbl">Bezeichnung</label><input class="wName" value="${esc(w.name)}" maxlength="40"></div>
+      <div><label class="lbl">alle … km</label><input class="wInt" inputmode="numeric" value="${w.intervall || ''}"></div>
+      <div><label class="lbl">zuletzt bei km</label><input class="wZul" inputmode="numeric" value="${w.zuletzt == null ? '' : w.zuletzt}"></div>
+      <button class="btn danger-outline" data-weg="${i}" aria-label="Erinnerung entfernen">✕</button>
+    </div>`).join('') || '<p class="klein">Keine Erinnerungen.</p>';
+    $$('[data-weg]').forEach(b => b.onclick = () => { wartSync(); daten.wartung.splice(+b.dataset.weg, 1); wartRender(); });
+  };
+  wartRender();
+  $('#btnWartNeu').onclick = () => { wartSync(); daten.wartung.push({ id: uid(), name: '', intervall: 5000, zuletzt: null }); wartRender(); };
+  $('#btnBikeSpeichern').onclick = async () => {
+    wartSync();
+    daten.name = $('#bName').value.trim();
+    if (!daten.name) return toast('Bitte einen Namen eingeben.');
+    daten.km = Math.max(0, zahlLesen($('#bKm').value));
+    daten.tank = Math.max(0, zahlLesen($('#bTank').value));
+    daten.verbrauch = Math.max(0, zahlLesen($('#bVerbr').value));
+    daten.wartung = daten.wartung.filter(w => w.name.trim() && w.intervall > 0).map(w => ({ ...w, name: w.name.trim(), zuletzt: w.zuletzt == null ? daten.km : w.zuletzt }));
+    await Speicher.setze('bikes', daten);
+    cache.bikes = cache.bikes.filter(x => x.id !== daten.id).concat(daten);
+    if (!einst.aktivesBike) { einst.aktivesBike = daten.id; await einstSpeichern(); }
+    sheetSchliessen(); renderGarage(); fahrBikeAnzeigen(); wartungsHinweis(false); toast('Motorrad gespeichert.');
+  };
+  const weg = $('#btnBikeWeg');
+  if (weg) weg.onclick = async () => {
+    if (!await frage('Motorrad löschen?', `„${esc(daten.name)}“ wirklich löschen? Die Fahrten bleiben erhalten, sind dann aber keinem Motorrad mehr zugeordnet.`, 'Löschen', 'danger')) return;
+    await Speicher.loesche('bikes', daten.id);
+    cache.bikes = cache.bikes.filter(x => x.id !== daten.id);
+    if (einst.aktivesBike === daten.id) { einst.aktivesBike = cache.bikes[0] ? cache.bikes[0].id : null; await einstSpeichern(); }
+    sheetSchliessen(); renderGarage(); fahrBikeAnzeigen(); wartungsHinweis(false);
+  };
+}
+// Roter Punkt am Garage-Tab, wenn eine Wartung fällig ist
+function wartungsHinweis(meldung) {
+  const faellig = [];
+  cache.bikes.forEach(b => (b.wartung || []).forEach(w => { if (wartungStatus(b, w).rest <= 0) faellig.push(`${w.name} (${b.name})`); }));
+  const tab = $('.tabs button[data-tab="garage"]');
+  if (tab) tab.classList.toggle('punkt', faellig.length > 0);
+  if (meldung && faellig.length) toast('🔧 Wartung fällig: ' + faellig.join(', '), 6000);
+}
+
+/* ===================== 14) EINSTELLUNGEN, NOTFALL, SCHRÄGLAGE, BACKUP ===================== */
+function einstFormularFuellen() {
+  const n = einst.notfall;
+  $('#nfName').value = n.name || ''; $('#nfKontakt').value = n.kontakt || ''; $('#nfTel').value = n.tel || '';
+  $('#nfBlut').value = n.blut || ''; $('#nfMed').value = n.med || '';
+  $('#chkLean').checked = !!einst.schraeglage;
+}
+async function notfallSpeichern() {
+  einst.notfall = { name: $('#nfName').value.trim(), kontakt: $('#nfKontakt').value.trim(), tel: $('#nfTel').value.trim(), blut: $('#nfBlut').value, med: $('#nfMed').value.trim() };
+  await einstSpeichern(); toast('Notfall-Infos gespeichert.');
+}
+async function notfallZeigen() {
+  const n = einst.notfall;
+  const leer = !n.name && !n.kontakt && !n.tel && !n.blut && !n.med;
+  const tel = (n.tel || '').replace(/[^\d+]/g, '');
+  const html = leer ? '<p>Noch keine Notfall-Infos gespeichert. Du kannst sie unter Einstellungen eintragen.</p><p class="klein">Notruf: <a href="tel:112">112</a></p>' : `<div class="notfall">
+      ${n.name ? `<div><span>Name</span><b>${esc(n.name)}</b></div>` : ''}
+      ${n.blut ? `<div><span>Blutgruppe</span><b class="riesig">${esc(n.blut)}</b></div>` : ''}
+      ${n.kontakt || n.tel ? `<div><span>Notfallkontakt</span><b>${esc(n.kontakt)}</b>${tel ? `<a class="btn primary block mt" href="tel:${esc(tel)}">📞 ${esc(n.tel)} anrufen</a>` : ''}</div>` : ''}
+      ${n.med ? `<div><span>Allergien, Medikamente, Vorerkrankungen</span><b>${esc(n.med).replace(/\n/g, '<br>')}</b></div>` : ''}
+    </div><p class="klein">Notruf in Deutschland und der EU: <a href="tel:112">112</a></p>`;
+  const v = await dialog({ titel: '✚ Notfall-Infos', html, knoepfe: leer ? [{ text: 'Schließen', wert: false }, { text: 'Jetzt eintragen', wert: 'edit', art: 'primary' }] : [{ text: 'Schließen', wert: false, art: 'primary' }] });
+  if (v === 'edit') zeigeTab('einstellungen');
+}
+
+// Schräglage über DeviceOrientation (Gamma-Wert) – nur Schätzwert
+const lean = { aktiv: false, roh: null, wert: 0, zuletzt: 0 };
+async function leanAktivieren() {
+  if (typeof DeviceOrientationEvent === 'undefined') return toast('Kein Lagesensor verfügbar (am PC normal).');
+  try {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') { // iPhone: Erlaubnis per Tipp
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') return toast('Zugriff auf den Lagesensor wurde nicht erlaubt.');
+    }
+  } catch (e) { return toast('Sensor-Freigabe fehlgeschlagen.'); }
+  if (!lean.aktiv) { window.addEventListener('deviceorientation', orientierung); lean.aktiv = true; }
+  toast('Sensor aktiv. Motorrad gerade hinstellen und „Kalibrieren“ tippen.', 5000);
+  setTimeout(() => { if (lean.roh === null) toast('Keine Sensordaten – am PC gibt es meist keinen Lagesensor.', 5000); }, 3000);
+}
+function orientierung(e) {
+  if (typeof e.gamma !== 'number' || !isFinite(e.gamma)) return;
+  lean.roh = lean.roh === null ? e.gamma : lean.roh * 0.8 + e.gamma * 0.2; // glätten
+  lean.wert = lean.roh - (einst.leanOffset || 0);
+  if (rec && rec.zustand === 'faehrt' && Math.abs(lean.wert) < 70) {
+    if (lean.wert < 0) rec.leanL = Math.max(rec.leanL, -lean.wert); else rec.leanR = Math.max(rec.leanR, lean.wert);
+  }
+  if (Date.now() - lean.zuletzt > 250) {
+    lean.zuletzt = Date.now();
+    $('#leanLive').textContent = `${Math.abs(Math.round(lean.wert))}° ${lean.wert < -1 ? 'links' : lean.wert > 1 ? 'rechts' : ''}`;
+    if (einst.schraeglage && !rec) fahrUIAktualisieren(false);
+  }
+}
+async function leanKalibrieren() {
+  if (lean.roh === null) return toast('Erst „Sensor aktivieren“ tippen.');
+  einst.leanOffset = lean.roh; await einstSpeichern(); toast('Nullpunkt gesetzt.');
+}
+
+// Backup (JSON) speichern / laden, alles löschen
+function backupSpeichern() {
+  const daten = { app: 'kurvenbuch', version: 1, exportiert: new Date().toISOString(), routes: cache.routes, rides: cache.rides, bikes: cache.bikes, einstellungen: einst };
+  herunterladen(`kurvenbuch-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(daten), 'application/json');
+}
+async function backupLaden(datei) {
+  try {
+    const d = JSON.parse(await dateiLesen(datei));
+    if (!d || d.app !== 'kurvenbuch') throw new Error('Das ist kein Kurvenbuch-Backup.');
+    if (!await frage('Backup laden?', 'Die Daten aus dem Backup werden zu deinen vorhandenen Daten hinzugefügt (gleiche Einträge werden überschrieben).', 'Laden')) return;
+    for (const s of ['routes', 'rides', 'bikes']) for (const x of (Array.isArray(d[s]) ? d[s] : [])) if (x && x.id) await Speicher.setze(s, x);
+    if (d.einstellungen) { einst = einstAusDaten(d.einstellungen); await einstSpeichern(); }
+    await datenLaden(); allesNeuZeichnen(); toast('Backup geladen.');
+  } catch (e) { dialog({ titel: 'Backup laden', html: `<p>${esc(e.message.includes('JSON') ? 'Die Datei ist beschädigt oder kein Backup.' : e.message)}</p>` }); }
+}
+async function allesLoeschen() {
+  if (rec) return toast('Bitte zuerst die laufende Fahrt beenden.');
+  if (!await frage('⚠️ Alle Daten löschen?', '<b>Alle Routen, Fahrten, Motorräder und Einstellungen werden endgültig gelöscht.</b> Das kann nicht rückgängig gemacht werden. Mach vorher ein Backup!', 'Weiter', 'danger')) return;
+  if (!await frage('Wirklich alles löschen?', 'Letzte Sicherheitsabfrage.', 'Endgültig löschen', 'danger')) return;
+  for (const s of ['routes', 'rides', 'bikes', 'kv']) await Speicher.leeren(s);
+  einst = klon(STANDARD_EINST); cache.routes = []; cache.rides = []; cache.bikes = [];
+  setAktiveRoute(null); planZuruecksetzen(); allesNeuZeichnen(); themeAnwenden(); toast('Alle Daten gelöscht.');
+}
+
+/* ===================== 15) START ===================== */
+async function datenLaden() {
+  const [r, f, b] = await Promise.all([Speicher.alle('routes'), Speicher.alle('rides'), Speicher.alle('bikes')]);
+  cache.routes = r; cache.rides = f; cache.bikes = b;
+  if (einst.aktivesBike && !cache.bikes.find(x => x.id === einst.aktivesBike)) einst.aktivesBike = null;
+}
+function allesNeuZeichnen() {
+  einstFormularFuellen(); startorteRendern(); renderRoutenListe(); renderRoutenAuswahl(); fahrBikeAnzeigen(); wartungsHinweis(false);
+  if (aktuellerTab === 'touren') renderTouren();
+  if (aktuellerTab === 'fahrten') renderFahrten();
+  if (aktuellerTab === 'garage') renderGarage();
+  fahrUIAktualisieren(true);
+}
+function ereignisseBinden() {
+  $$('.tabs button').forEach(b => b.onclick = () => zeigeTab(b.dataset.tab));
+  $('#btnVollbild').onclick = vollbild;
+  $('#btnTheme').onclick = async () => { einst.theme = istDunkel() ? 'light' : 'dark'; themeAnwenden(); await einstSpeichern(); };
+  $('#btnNotfall').onclick = notfallZeigen;
+  $('#btnPausenOk').onclick = () => { $('#pausenBanner').hidden = true; };
+  $('#sheetZurueck').onclick = sheetSchliessen;
+  // Planen
+  $('#btnStartSuchen').onclick = () => sucheAdresse('start');
+  $('#btnZielSuchen').onclick = () => sucheAdresse('ziel');
+  $('#inStart').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sucheAdresse('start'); } });
+  $('#inZiel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sucheAdresse('ziel'); } });
+  $('#btnStandort').onclick = standortAlsStart;
+  $('#segTippen').onclick = e => { const b = e.target.closest('button'); if (!b) return; plan.tippen = b.dataset.v; $$('#segTippen button').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#segModus').onclick = e => { const b = e.target.closest('button'); if (!b) return; plan.modus = b.dataset.v; $$('#segModus button').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#viaListe').onclick = e => { const b = e.target.closest('button[data-i]'); if (!b) return; plan.vias.splice(+b.dataset.i, 1); plan.vias.forEach((v, i) => v.name = 'Zwischenstopp ' + (i + 1)); ergebnisVerwerfen(); renderPlanMarker(); };
+  $('#btnBerechnen').onclick = berechneRoute;
+  $('#btnPlanReset').onclick = planZuruecksetzen;
+  $('#inRundKm').oninput = e => { plan.rundKm = +e.target.value; $('#rundKmWert').textContent = plan.rundKm; };
+  $('#btnRundtour').onclick = rundtour;
+  $('#btnWuerfeln').onclick = rundtour;
+  $('#routenListe').onclick = e => { const b = e.target.closest('button[data-a]'); if (b) routenAktion(b.dataset.a, b.dataset.id); };
+  $('#gpxImport').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) gpxImportieren(f); };
+  // Fahren
+  $('#btnHaupt').onclick = hauptKnopf;
+  $('#btnDemo').onclick = () => fahrtStarten(true);
+  $('#btnPause').onclick = pauseUmschalten;
+  // Startorte & Touren
+  $('#btnStartortSpeichern').onclick = startortSpeichern;
+  $('#startortChips').onclick = e => { const b = e.target.closest('button[data-id]'); if (!b) return; const o = einst.startorte.find(x => x.id === b.dataset.id); if (o) startortSetzen(o); };
+  $('#startortListe').onclick = e => { const b = e.target.closest('button[data-a]'); if (b) startortAktion(b.dataset.a, b.dataset.id); };
+  $('#selTourStart').onchange = renderTouren;
+  $('#chkAnfahrt').onchange = renderTouren;
+  $('#tourFilter').onclick = e => { const b = e.target.closest('button[data-g]'); if (!b) return; tourFilter = b.dataset.g; renderTouren(); };
+  $('#tourListe').onclick = e => { const b = e.target.closest('button[data-tour]'); if (b) tourBerechnen(b.dataset.tour); };
+  $('#btnTeilen').onclick = standortTeilen;
+  $('#selRoute').onchange = routeAuswahlGeaendert;
+  $('#btnZentrieren').onclick = () => { folgen = true; $('#btnZentrieren').hidden = true; if (letztePosition && fahrKarte) fahrKarte.setView([letztePosition.lat, letztePosition.lon], Math.max(fahrKarte.getZoom(), 15)); };
+  // Garage
+  $('#garageInhalt').addEventListener('click', e => { const b = e.target.closest('button[data-a]'); if (b) garageAktion(b.dataset.a, b.dataset.id, b.dataset.w); });
+  // Einstellungen
+  $('#segTheme').onclick = async e => { const b = e.target.closest('button'); if (!b) return; einst.theme = b.dataset.v; themeAnwenden(); await einstSpeichern(); };
+  $('#btnNfSpeichern').onclick = notfallSpeichern;
+  $('#btnNfZeigen').onclick = notfallZeigen;
+  $('#chkLean').onchange = async e => { einst.schraeglage = e.target.checked; await einstSpeichern(); fahrUIAktualisieren(true); };
+  $('#btnLeanAn').onclick = leanAktivieren;
+  $('#btnLeanKal').onclick = leanKalibrieren;
+  $('#btnBackup').onclick = backupSpeichern;
+  $('#backupImport').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) backupLaden(f); };
+  $('#btnAllesLoeschen').onclick = allesLoeschen;
+  window.addEventListener('resize', () => setTimeout(kartenAktualisieren, 100));
+  // Unerwartete Fehler anzeigen statt still abzustürzen
+  window.addEventListener('error', e => { if (e && e.message) toast('Fehler: ' + e.message, 5000); });
+  window.addEventListener('unhandledrejection', e => { toast('Fehler: ' + ((e.reason && e.reason.message) || e.reason), 5000); });
+}
+async function init() {
+  ereignisseBinden();
+  try {
+    const e = await Speicher.hole('kv', 'einstellungen');
+    if (e) einst = einstAusDaten(e);
+  } catch (e) { /* Standardwerte bleiben */ }
+  themeAnwenden();
+  await datenLaden();
+  planKarteInit(); fahrKarteInit();
+  if (typeof L === 'undefined') toast('Karte konnte nicht geladen werden (offline?). Gespeicherte Fahrten sind trotzdem da.', 6000);
+  $('#hinweisUnsicher').hidden = !!window.isSecureContext;
+  allesNeuZeichnen(); steuerungAnzeigen(); renderViaListe();
+  zeigeTab('planen');
+  // Standard-Startort (z. B. Zuhause) automatisch als Start setzen
+  const std = einst.startorte.find(o => o.id === einst.standardStart);
+  if (std) startortSetzen(std);
+  await absturzPruefen();
+}
+init().catch(e => { console.error(e); toast('Startfehler: ' + e.message, 8000); });
+</script>
+</body>
+</html>
