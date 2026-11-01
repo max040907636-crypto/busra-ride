@@ -280,6 +280,12 @@ body.navi-ansicht .tacho-ecke{bottom:80px}
 body.navi-ansicht #fahrKarte .leaflet-bottom{bottom:54px}
 body.nav-banner-an #fahrKarte .leaflet-top{top:104px}
 
+/* ---------- Positionspfeil (zeigt die Fahrtrichtung) ---------- */
+.pos-wrap{background:none;border:0}
+.pos-pfeil{width:40px;height:40px}
+.pos-pfeil svg{width:40px;height:40px;display:block;filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
+#sperrBanner{padding-top:6px;padding-bottom:6px}
+
 /* ---------- Fahrsperre: gesperrte Bereiche ---------- */
 body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
 
@@ -303,8 +309,8 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
   </button>
 </header>
 
-<div id="sperrBanner" class="banner warn" hidden>🔒 Fahrsperre: nur Pause und Stopp</div>
-<div id="pausenBanner" class="banner info" hidden><span class="grow">☕ 2 Stunden gefahren – Zeit für eine Pause!</span><button class="btn" id="btnPausenOk">OK</button></div>
+<div id="sperrBanner" class="banner warn" hidden><span class="grow">🔒 Fahrsperre: nur Pause/Stopp</span><button class="btn" id="btnBeifahrer">Beifahrer/in?</button></div>
+<div id="pausenBanner" class="banner info" hidden><span class="grow" id="pausenText">☕ Zeit für eine Pause!</span><button class="btn" id="btnPausenOk">OK</button></div>
 
 <main>
   <!-- ===================== PLANEN ===================== -->
@@ -456,6 +462,12 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
       <select id="nfBlut"><option value="">unbekannt</option><option>0+</option><option>0−</option><option>A+</option><option>A−</option><option>B+</option><option>B−</option><option>AB+</option><option>AB−</option></select>
       <label class="lbl" for="nfMed">Allergien, Medikamente, Vorerkrankungen</label><textarea id="nfMed" rows="3"></textarea>
       <div class="row mt"><button class="btn primary grow" id="btnNfSpeichern">Speichern</button><button class="btn grow" id="btnNfZeigen">Anzeigen</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Pausenerinnerung</h3>
+      <label class="lbl" for="selPause">Erinnern nach reiner Fahrzeit (Ton, Anzeige, Ansage)</label>
+      <select id="selPause"><option value="0">Aus</option><option value="60">1 Stunde</option><option value="90">1,5 Stunden</option><option value="120">2 Stunden</option><option value="180">3 Stunden</option></select>
     </div>
 
     <div class="card">
@@ -719,7 +731,7 @@ const Speicher = (() => {
 // Zwischenspeicher im Programm (wird beim Start aus IndexedDB geladen)
 const cache = { routes: [], rides: [], bikes: [] };
 const STANDARD_EINST = { theme: 'auto', aktivesBike: null, schraeglage: false, leanOffset: 0, startorte: [], standardStart: null,
-  abbiegen: false, sprache: false, autoZoom: true, tempolimit: false, fahrAnsicht: 'tacho', notfall: { name: '', kontakt: '', tel: '', blut: '', med: '' } };
+  abbiegen: false, sprache: false, autoZoom: true, tempolimit: false, fahrAnsicht: 'tacho', pausenMin: 120, notfall: { name: '', kontakt: '', tel: '', blut: '', med: '' } };
 // Gelesene Einstellungen mit Standardwerten zusammenführen (auch für ältere Backups)
 function einstAusDaten(e) {
   const x = { ...klon(STANDARD_EINST), ...(e || {}) };
@@ -1530,6 +1542,8 @@ function renderRoutenAuswahl() {
   const sel = $('#selRoute');
   const planR = plan.ergebnisse[plan.gewaehlt];
   let html = '<option value="">Ohne geplante Route</option>';
+  // Schnellziele: gespeicherte Startorte (Standard = "Nach Hause")
+  einst.startorte.forEach(o => html += `<option value="__ort:${o.id}">${o.id === einst.standardStart ? '🏠 Nach Hause' : '📍 Zu'} „${esc(o.name)}“</option>`);
   if (aktiveRoute && !aktiveRoute.id) html += `<option value="__aktiv">Aktiv: ${esc(aktiveRoute.name)}</option>`;
   if (planR && !(aktiveRoute && aktiveRoute.quelle === planR)) html += `<option value="__plan">Gerade geplant: ${esc(planR.name)}</option>`;
   [...cache.routes].sort((a, b) => b.erstellt - a.erstellt).forEach(r => html += `<option value="${r.id}">${esc(r.name)} (${fmtKm(r.distance)})</option>`);
@@ -1540,8 +1554,25 @@ function routeAuswahlGeaendert() {
   const v = $('#selRoute').value;
   if (v === '') setAktiveRoute(null);
   else if (v === '__plan') { const r = plan.ergebnisse[plan.gewaehlt]; if (r) setAktiveRoute({ ...r, quelle: r }); }
+  else if (v.startsWith('__ort:')) { zuStartort(v.slice(6)); return; }
   else if (v !== '__aktiv') setAktiveRoute(cache.routes.find(r => r.id === v));
   if (rec) navStarten();
+}
+// Route von der aktuellen Position zu einem gespeicherten Startort (z. B. nach Hause)
+async function zuStartort(id) {
+  const o = einst.startorte.find(x => x.id === id);
+  if (!o) return renderRoutenAuswahl();
+  let p = letztePosition && jetzt() - letztePosition.t < 120000 ? letztePosition : null;
+  try {
+    if (!p) { toast('Standort wird bestimmt …'); p = await aktuellePosition(); }
+    if (distanz(p, o) < 300) { toast(`Du bist schon bei „${o.name}“.`); return renderRoutenAuswahl(); }
+    toast('Route wird berechnet …');
+    const r = (await osrmSicher([{ lat: p.lat, lon: p.lon }, { lat: o.lat, lon: o.lon }], { ohneAutobahn: false }))[0];
+    const name = o.id === einst.standardStart ? `Nach Hause (${o.name})` : `Zu ${o.name}`;
+    setAktiveRoute({ ...r, name, waypoints: [{ lat: p.lat, lon: p.lon, name: 'Mein Standort' }, { lat: o.lat, lon: o.lon, name: o.name }], modus: 'schnell' }, { planBehalten: !!rec });
+    if (rec) navStarten();
+    toast(rec ? `${name}: Route aktiv.` : `${name}: Route aktiv – mit START losfahren.`, 4500);
+  } catch (e) { dialog({ titel: 'Route', html: `<p>${esc(e.message)}</p>` }); renderRoutenAuswahl(); }
 }
 function fahrBikeAnzeigen() {
   const b = aktivesBike();
@@ -1577,7 +1608,7 @@ function neueAufzeichnung(demoModus) {
     id: uid(), demo: !!demoModus, zustand: 'faehrt', start: t, letzterTick: t, fahrMs: 0,
     segmente: [[]], distanz: 0, maxSpeed: 0, maxSpeedPos: null, puffer: [], tempo: 0,
     letzterSpeedFix: null, letzterTrackPunkt: null, langsamSeit: null, autoPause: false,
-    naechstePause: ZWEI_STUNDEN, hmGewinn: 0, hmRef: null, leanL: 0, leanR: 0,
+    naechstePause: pausenIntervall() || Infinity, beifahrer: false, hmGewinn: 0, hmRef: null, leanL: 0, leanR: 0,
     bikeId: einst.aktivesBike || null,
     plan: aktiveRoute ? { routeId: aktiveRoute.id, name: aktiveRoute.name, duration: aktiveRoute.duration, distance: aktiveRoute.distance } : null
   };
@@ -1628,7 +1659,11 @@ function fixVerarbeiten(pos) {
   rec.puffer.push(v); if (rec.puffer.length > 5) rec.puffer.shift();
   const vs = rec.puffer.reduce((a, b) => a + b, 0) / rec.puffer.length;
   rec.tempo = vs;
-  positionZeigen(p);
+  // Fahrtrichtung: GPS-Kurs (wenn in Bewegung) oder aus den letzten zwei Punkten
+  let richtung = null;
+  if (typeof c.heading === 'number' && isFinite(c.heading) && v > 3) richtung = c.heading;
+  else if (vorher && distanz(vorher, p) > 4) richtung = peilung(vorher, p);
+  positionZeigen(p, richtung);
   fahrsperrePruefen(vs);
   tempolimitPruefen(p);
   if (rec.zustand !== 'faehrt') return;
@@ -1661,10 +1696,15 @@ function fixVerarbeiten(pos) {
   }
   routeFortschritt(p, vs);
 }
-function positionZeigen(p) {
+function positionZeigen(p, richtung) {
   if (!fahrKarte) return;
-  if (!posMarker) posMarker = L.circleMarker([p.lat, p.lon], { radius: 10, color: '#fff', weight: 3, fillColor: '#0b5cad', fillOpacity: 1, interactive: false }).addTo(fahrKarte);
-  else posMarker.setLatLng([p.lat, p.lon]);
+  if (!posMarker) {
+    posMarker = L.marker([p.lat, p.lon], { icon: L.divIcon({ className: 'pos-wrap', html: '<div class="pos-pfeil"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="#0b5cad" stroke="#fff" stroke-width="3"/><path d="M20 8 28 28 20 23 12 28Z" fill="#fff"/></svg></div>', iconSize: [40, 40], iconAnchor: [20, 20] }), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(fahrKarte);
+  } else posMarker.setLatLng([p.lat, p.lon]);
+  if (typeof richtung === 'number' && isFinite(richtung)) {
+    const el = posMarker.getElement(), pf = el && el.querySelector('.pos-pfeil');
+    if (pf) pf.style.transform = `rotate(${Math.round(richtung)}deg)`;
+  }
   if (folgen) {
     // Auto-Zoom: je schneller, desto weiter raus (wie bei Navi-Apps)
     let z = Math.max(fahrKarte.getZoom(), 15);
@@ -1714,8 +1754,16 @@ function restSekunden() {
 // Fahrsperre: ab 10 km/h nur noch Pause/Stopp. Aufheben nach 5 s unter 10 km/h.
 function fahrsperrePruefen(vs) {
   const t = jetzt();
-  if (rec && rec.zustand === 'faehrt' && vs >= 10) { sperreSeit = t; if (!fahrsperre) sperreSetzen(true); }
-  else if (fahrsperre && (!rec || rec.zustand !== 'faehrt' || t - sperreSeit > 5000)) sperreSetzen(false);
+  if (rec && rec.zustand === 'faehrt' && !rec.beifahrer && vs >= 10) { sperreSeit = t; if (!fahrsperre) sperreSetzen(true); }
+  else if (fahrsperre && (!rec || rec.zustand !== 'faehrt' || rec.beifahrer || t - sperreSeit > 5000)) sperreSetzen(false);
+}
+// Beifahrer/in darf die Sperre für diese Fahrt aufheben (wie "Ich bin Beifahrer" bei Navi-Apps)
+async function beifahrerModus() {
+  if (!rec) return;
+  const ok = await frage('Beifahrer/in?', 'Nur entsperren, wenn <b>nicht der Fahrer</b> das Handy bedient. Als Fahrer ist das Bedienen des Handys während der Fahrt verboten (§ 23 Abs. 1a StVO). Die Sperre bleibt dann für diese Fahrt aus.', 'Ich bin Beifahrer/in');
+  if (!ok || !rec) return;
+  rec.beifahrer = true; sperreSetzen(false); aufzeichnungSichern();
+  toast('Fahrsperre für diese Fahrt aus.');
 }
 function sperreSetzen(an) {
   fahrsperre = an;
@@ -1734,7 +1782,7 @@ function tick() {
   const t = jetzt(), dt = Math.max(0, t - rec.letzterTick);
   rec.letzterTick = t;
   if (rec.zustand === 'faehrt' && !rec.autoPause) rec.fahrMs += dt;
-  if (rec.fahrMs >= rec.naechstePause) { rec.naechstePause += ZWEI_STUNDEN; pausenErinnerung(); }
+  if (rec.fahrMs >= rec.naechstePause) { const iv = pausenIntervall(); rec.naechstePause = iv ? rec.fahrMs + iv : Infinity; pausenErinnerung(); }
   if (rec.zustand === 'faehrt' && t - letzterFix > 15000) { rec.tempo = 0; gpsStatus('Kein GPS-Signal …', 'bad'); }
   fahrsperrePruefen(rec.tempo);
   fahrUIAktualisieren(false);
@@ -1910,10 +1958,20 @@ function piep() {
     });
   } catch (e) {}
 }
+// Pausen-Intervall aus den Einstellungen in Millisekunden (0 = aus)
+function pausenIntervall() { return Math.max(0, +einst.pausenMin || 0) * 60000; }
+function stundenText(h) {
+  if (h <= 1) return 'einer Stunde';
+  if (h === 1.5) return 'anderthalb Stunden';
+  const w = ['', 'einer', 'zwei', 'drei', 'vier', 'fünf', 'sechs'];
+  return Number.isInteger(h) && h < 7 ? `${w[h]} Stunden` : `${zahl(h, 1)} Stunden`;
+}
 function pausenErinnerung() {
+  const h = Math.max(0.5, Math.round((rec ? rec.fahrMs : 0) / 1800000) / 2);
+  $('#pausenText').textContent = `☕ ${zahl(h, h % 1 ? 1 : 0)} ${h === 1 ? 'Stunde' : 'Stunden'} gefahren – Zeit für eine Pause!`;
   $('#pausenBanner').hidden = false;
   piep();
-  sprechen('Du fährst seit zwei Stunden. Zeit für eine Pause.');
+  sprechen(`Du fährst seit ${stundenText(h)}. Zeit für eine Pause.`);
   try { if (navigator.vibrate) navigator.vibrate([400, 150, 400]); } catch (e) {}
 }
 
@@ -2354,9 +2412,17 @@ async function zeigeAuswertung(f) {
     html: `<div class="topspeed"><span>Top-Speed dieser Fahrt</span><b>${zahl(f.maxSpeed, 0)}<small> km/h</small></b><em>GPS-Wert, kann vom Tacho abweichen.</em>${neu ? '<span class="pill good">Neuer Allzeit-Höchstwert</span>' : ''}</div>
       ${statGrid(f)}${vergleichHTML(f)}
       ${f.demo ? '<p class="klein">Demo-Fahrten zählen nicht in Statistik und Kilometerstand.</p>' : ''}`,
-    knoepfe: [{ text: 'Schließen', wert: false }, { text: 'Details & Karte', wert: true, art: 'primary' }]
+    knoepfe: [{ text: 'Schließen', wert: false }, { text: '📤 Teilen', wert: 'teilen' }, { text: 'Details & Karte', wert: true, art: 'primary' }]
   });
-  if (wahl) { zeigeTab('fahrten'); fahrtDetail(f.id); }
+  if (wahl === 'teilen') fahrtTeilen(f);
+  else if (wahl) { zeigeTab('fahrten'); fahrtDetail(f.id); }
+}
+// Kurze Zusammenfassung teilen (bewusst ohne Top-Speed und ohne Standortdaten)
+async function fahrtTeilen(f) {
+  const text = `🏍️ ${f.name}\n${fmtKm(f.distance)} · ${fmtDauer(f.fahrMs)} Fahrzeit · Ø ${zahl(f.schnitt, 0)} km/h · ${zahl(f.hm, 0)} Hm${f.plan ? `\nRoute: ${f.plan.name}` : ''}\nAufgezeichnet mit Kurvenbuch`;
+  if (navigator.share) { try { await navigator.share({ title: f.name, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(text); toast('Text kopiert – jetzt z. B. in WhatsApp einfügen.'); }
+  catch (e) { dialog({ titel: 'Fahrt teilen', html: `<textarea readonly rows="5">${esc(text)}</textarea>` }); }
 }
 
 /* ===================== 12) FAHRTEN-VERLAUF ===================== */
@@ -2405,9 +2471,11 @@ function fahrtDetail(id) {
     <select id="detailBike" ${f.demo ? 'disabled' : ''}>${optionen}</select>
     ${f.demo ? '<p class="klein">Demo-Fahrten werden keinem Motorrad zugerechnet.</p>' : ''}
     <div class="row mt"><button class="btn grow" id="dName">✏️ Umbenennen</button><button class="btn grow" id="dGpx">GPX exportieren</button></div>
+    <button class="btn block mt" id="dTeilen">📤 Fahrt teilen</button>
     <button class="btn danger-outline block mt" id="dWeg">🗑️ Fahrt löschen</button>`);
   setTimeout(() => { detailKarteZeichnen(f); zeichneTempo($('#tempoChart'), f); }, 80);
   $('#dGpx').onclick = () => herunterladen(dateiName(f.name) + '.gpx', gpxAusFahrt(f), 'application/gpx+xml');
+  $('#dTeilen').onclick = () => fahrtTeilen(f);
   $('#dName').onclick = async () => {
     const n = await eingabe('Fahrt umbenennen', 'Neuer Name', f.name); if (n === null) return;
     f.name = n.trim() || f.name; await Speicher.setze('rides', f); $('#sheetTitel').textContent = f.name; renderFahrten();
@@ -2592,6 +2660,7 @@ function einstFormularFuellen() {
   $('#chkSprache').checked = !!einst.sprache; $('#chkSprache').disabled = !einst.abbiegen;
   $('#chkAutoZoom').checked = einst.autoZoom !== false;
   $('#chkTempolimit').checked = !!einst.tempolimit;
+  $('#selPause').value = String(einst.pausenMin ?? 120);
 }
 async function notfallSpeichern() {
   einst.notfall = { name: $('#nfName').value.trim(), kontakt: $('#nfKontakt').value.trim(), tel: $('#nfTel').value.trim(), blut: $('#nfBlut').value, med: $('#nfMed').value.trim() };
@@ -2739,6 +2808,12 @@ function ereignisseBinden() {
   $('#btnAnsicht').onclick = ansichtWechseln;
   $('#btnUebersicht').onclick = uebersichtZeigen;
   $('#btnTanken').onclick = tankstellenSuchen;
+  $('#btnBeifahrer').onclick = beifahrerModus;
+  $('#selPause').onchange = async e => {
+    einst.pausenMin = +e.target.value; await einstSpeichern();
+    if (rec) { const iv = pausenIntervall(); rec.naechstePause = iv ? (Math.floor(rec.fahrMs / iv) + 1) * iv : Infinity; }
+    toast(einst.pausenMin ? `Pausenerinnerung nach ${e.target.selectedOptions[0].text}.` : 'Pausenerinnerung aus.');
+  };
   $('#btnLeanAn').onclick = leanAktivieren;
   $('#btnLeanKal').onclick = leanKalibrieren;
   $('#btnBackup').onclick = backupSpeichern;
