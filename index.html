@@ -180,7 +180,7 @@ input[type=checkbox]{width:28px;height:28px;min-height:0;accent-color:var(--acce
 .wert span{font-size:13px;color:var(--muted);font-weight:700}
 .karte-wrap{position:relative;flex:1 1 auto;min-height:70px;display:flex}
 .karte-wrap .karte{flex:1}
-.map-btn{position:absolute;right:10px;bottom:10px;z-index:900;min-width:56px;min-height:56px;border-radius:50%;border:2px solid var(--line);background:var(--card);color:var(--text);font-size:24px}
+.map-btn{min-width:56px;min-height:56px;border-radius:50%;border:2px solid var(--line);background:var(--card);color:var(--text);font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.25);padding:0}
 .fahr-steuerung{background:var(--card);border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .gps-hinweis{font-size:13px;font-weight:700;color:var(--warn);text-align:center;line-height:1.3}
 /* Während der Fahrt: unbenutzbare Bedienelemente ausblenden, damit Pause/Stopp immer sichtbar sind */
@@ -251,6 +251,34 @@ body.fahrsperre .fahr-steuerung .sperrbar,body.fahrsperre .gps-hinweis,body.aufn
 .ort-chip,.filter-chip{min-height:56px;padding:0 16px;border-radius:999px;border:2px solid var(--line);background:var(--card2);color:var(--text);font-weight:700;font-size:15px}
 .filter-chip.on{background:var(--accent);border-color:var(--accent-line);color:var(--accent-text)}
 .tour p{margin:8px 0}
+
+/* ---------- Navigation (wie bei Navi-Apps) ---------- */
+.nav-banner{position:absolute;left:8px;right:8px;top:8px;z-index:950;display:flex;gap:12px;align-items:center;background:#0b6638;color:#fff;border-radius:16px;padding:10px 14px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.nav-banner.neu{background:#8a4f00}
+.nav-pfeil{font-size:44px;line-height:1;font-weight:800;min-width:48px;text-align:center}
+.nav-dist{font-family:var(--zahl);font-size:30px;font-weight:700;line-height:1.05}
+.nav-text{font-size:17px;font-weight:700;line-height:1.25}
+.nav-dann{font-size:14px;opacity:.92;margin-top:2px}
+.tacho-ecke{position:absolute;left:10px;bottom:10px;z-index:900;display:flex;align-items:flex-end;gap:8px;pointer-events:none}
+.tacho-bubble{width:78px;height:78px;border-radius:50%;background:var(--card);color:var(--text);border:3px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.tacho-bubble b{font-family:var(--zahl);font-size:32px;line-height:1}
+.tacho-bubble span{font-size:11px;font-weight:700;color:var(--muted)}
+.tacho-bubble.zu-schnell{background:#c62828;border-color:#c62828;color:#fff}
+.tacho-bubble.zu-schnell span{color:#fff}
+.tempo.zu-schnell{color:var(--bad)}
+.limit-schild{width:54px;height:54px;border-radius:50%;background:#fff;border:6px solid #d50000;display:grid;place-items:center;color:#111;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.limit-schild b{font-family:var(--zahl);font-size:21px}
+.map-knoepfe{position:absolute;right:10px;bottom:10px;z-index:900;display:flex;gap:6px}
+.nav-info{position:absolute;left:0;right:0;bottom:0;z-index:890;background:var(--card);border-top:1px solid var(--line);padding:6px 12px;display:flex;justify-content:space-around;gap:10px;font-family:var(--zahl);font-size:22px;font-weight:700;min-height:54px;align-items:center}
+.nav-info span{text-align:center;line-height:1.1}
+.nav-info small{display:block;font-family:system-ui,sans-serif;font-size:12px;color:var(--muted);font-weight:700}
+/* Navi-Ansicht: große Karte, Werte unten wie bei Google Maps */
+body.navi-ansicht .fahr-werte{display:none}
+body.navi-ansicht .karte-wrap{min-height:220px}
+body.navi-ansicht .map-knoepfe{flex-direction:column;bottom:86px}
+body.navi-ansicht .tacho-ecke{bottom:80px}
+body.navi-ansicht #fahrKarte .leaflet-bottom{bottom:54px}
+body.nav-banner-an #fahrKarte .leaflet-top{top:104px}
 
 /* ---------- Fahrsperre: gesperrte Bereiche ---------- */
 body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
@@ -363,7 +391,22 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
     </div>
     <div class="karte-wrap">
       <div id="fahrKarte" class="karte"></div>
-      <button class="map-btn" id="btnZentrieren" aria-label="Karte auf Position zentrieren" hidden>◎</button>
+      <!-- Abbiegehinweis (nur mit Abbiegeassistent) -->
+      <div id="navBanner" class="nav-banner" hidden role="status" aria-live="polite">
+        <div class="nav-pfeil" id="navPfeil">↑</div>
+        <div class="grow"><div class="nav-dist" id="navDist">–</div><div class="nav-text" id="navText"></div><div class="nav-dann" id="navDann" hidden></div></div>
+      </div>
+      <!-- Tacho unten links (Navi-Ansicht) und Tempolimit -->
+      <div class="tacho-ecke">
+        <div id="tachoBubble" class="tacho-bubble" hidden><b id="bTempo">0</b><span>km/h</span></div>
+        <div id="limitSchild" class="limit-schild" hidden title="Tempolimit laut OpenStreetMap"><b id="limitWert">–</b></div>
+      </div>
+      <div class="map-knoepfe">
+        <button class="map-btn" id="btnZentrieren" aria-label="Karte auf Position zentrieren" title="Zentrieren" hidden>◎</button>
+        <button class="map-btn" id="btnUebersicht" aria-label="Ganze Route zeigen" title="Übersicht">⤢</button>
+        <button class="map-btn" id="btnAnsicht" aria-label="Zur Navi-Ansicht wechseln" title="Tacho- oder Navi-Ansicht">🗺️</button>
+      </div>
+      <div id="navInfo" class="nav-info" hidden></div>
     </div>
     <div class="fahr-steuerung">
       <div id="hinweisUnsicher" class="warnbox bad" hidden>GPS geht nur über https:// oder localhost – nicht beim Öffnen als Datei (file://). Zum Testen am PC: „Demo-Fahrt“.</div>
@@ -371,6 +414,7 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
       <div class="row sperrbar">
         <select id="selRoute" class="grow" aria-label="Geplante Route für diese Fahrt"><option value="">Ohne geplante Route</option></select>
         <button class="icon-btn" id="btnTeilen" aria-label="Standort teilen" title="Standort teilen">📤</button>
+        <button class="icon-btn" id="btnTanken" aria-label="Tankstellen in der Nähe" title="Tankstellen in der Nähe">⛽</button>
         <button class="icon-btn" id="btnDemo" aria-label="Demo-Fahrt simulieren" title="Demo-Fahrt simulieren">🧪</button>
       </div>
       <div class="klein" id="fahrBike" style="text-align:center;margin:0"></div>
@@ -412,6 +456,17 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
       <select id="nfBlut"><option value="">unbekannt</option><option>0+</option><option>0−</option><option>A+</option><option>A−</option><option>B+</option><option>B−</option><option>AB+</option><option>AB−</option></select>
       <label class="lbl" for="nfMed">Allergien, Medikamente, Vorerkrankungen</label><textarea id="nfMed" rows="3"></textarea>
       <div class="row mt"><button class="btn primary grow" id="btnNfSpeichern">Speichern</button><button class="btn grow" id="btnNfZeigen">Anzeigen</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Navigation</h3>
+      <p class="klein">Abbiegehinweise gibt es während der Aufzeichnung, wenn eine geplante Route aktiv ist. Weicht man ab, wird die Route neu berechnet. App offen und Bildschirm an lassen.</p>
+      <label class="check"><input type="checkbox" id="chkAbbiegen"> Abbiegeassistent (z. B. „In 300 m rechts abbiegen“)</label>
+      <label class="check"><input type="checkbox" id="chkSprache"> Sprachassistent (Hinweise vorlesen)</label>
+      <button class="btn block" id="btnSpracheTest">🔊 Ansage testen</button>
+      <label class="check"><input type="checkbox" id="chkAutoZoom"> Karte zoomt je nach Tempo automatisch</label>
+      <label class="check"><input type="checkbox" id="chkTempolimit"> Tempolimit anzeigen (experimentell)</label>
+      <p class="klein">Tempolimits kommen aus OpenStreetMap und können fehlen oder falsch sein – es gelten immer die Schilder. Dafür, für die Routenberechnung und für die Tankstellen-Suche wird deine ungefähre Position an den jeweiligen Dienst gesendet (overpass-api.de, router.project-osrm.org).</p>
     </div>
 
     <div class="card">
@@ -481,6 +536,7 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
    7b) Startorte & Tourenvorschläge
     8) GPX Import/Export
     9) Fahren (GPS-Aufzeichnung, Auto-Pause, Fahrsperre, Wake Lock)
+   9b) Navigation (Abbiegehinweise, Sprache, Neuberechnung, Tempolimit, Tankstellen)
    10) Demo-Fahrt (Fake-GPS)
    11) Auswertung & geplante vs. echte Zeit
    12) Fahrten-Verlauf & Statistik
@@ -511,6 +567,8 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
 const WETTER_URL = 'https://api.open-meteo.com/v1/forecast';
 // OSM-Kacheln: Nutzungsregeln von openstreetmap.org beachten (Quellenangabe Pflicht).
 const KACHEL_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Overpass (OSM-Daten für Tempolimits und Tankstellen): öffentlicher Server, nur sparsam abfragen.
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 const TXT_UNSICHER = 'GPS geht nur über https:// oder localhost – nicht beim Öffnen als Datei (file://).';
 const ZWEI_STUNDEN = 2 * 3600000;
@@ -660,7 +718,8 @@ const Speicher = (() => {
 
 // Zwischenspeicher im Programm (wird beim Start aus IndexedDB geladen)
 const cache = { routes: [], rides: [], bikes: [] };
-const STANDARD_EINST = { theme: 'auto', aktivesBike: null, schraeglage: false, leanOffset: 0, startorte: [], standardStart: null, notfall: { name: '', kontakt: '', tel: '', blut: '', med: '' } };
+const STANDARD_EINST = { theme: 'auto', aktivesBike: null, schraeglage: false, leanOffset: 0, startorte: [], standardStart: null,
+  abbiegen: false, sprache: false, autoZoom: true, tempolimit: false, fahrAnsicht: 'tacho', notfall: { name: '', kontakt: '', tel: '', blut: '', med: '' } };
 // Gelesene Einstellungen mit Standardwerten zusammenführen (auch für ältere Backups)
 function einstAusDaten(e) {
   const x = { ...klon(STANDARD_EINST), ...(e || {}) };
@@ -832,7 +891,7 @@ const warteOSRM = drossel(1100), warteNominatim = drossel(1100);
 async function osrm(punkte, { alternativen = false, ohneAutobahn = false } = {}) {
   await warteOSRM();
   const coords = punkte.map(p => p.lon.toFixed(6) + ',' + p.lat.toFixed(6)).join(';');
-  let url = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  let url = `${OSRM_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`;
   // Alternativen liefert OSRM nur bei genau 2 Punkten (ohne Zwischenstopps)
   if (alternativen && punkte.length === 2) url += '&alternatives=true';
   if (ohneAutobahn) url += '&exclude=motorway';
@@ -848,7 +907,7 @@ async function osrm(punkte, { alternativen = false, ohneAutobahn = false } = {})
   return d.routes.map(r => {
     const geo = r.geometry.coordinates.map(c => [c[1], c[0]]);
     const k = kurvigkeit(geo);
-    return { geometry: geo, distance: r.distance, duration: r.duration, kurv: k, sterne: sterne(k) };
+    return { geometry: geo, distance: r.distance, duration: r.duration, kurv: k, sterne: sterne(k), steps: schritteAus(r), ohneAutobahn: !!ohneAutobahn };
   });
 }
 // Wie osrm(), aber: kennt der Server "exclude=motorway" nicht, nochmal ohne
@@ -1020,7 +1079,7 @@ async function berechneRoute() {
     let r;
     if (plan.modus === 'kurvig') r = await kurvigeRouten(punkte, (i, n) => status(`Suche kurvige Varianten … ${i} von ${n}`));
     else r = await osrmSicher(punkte, { alternativen: true, ohneAutobahn: plan.modus === 'ohneab' });
-    return r.map(x => ({ ...x, waypoints: wps, modus: plan.modus, name: `${plan.start.name} → ${plan.ziel.name}` }));
+    return r.map(x => ({ ...x, waypoints: wps, modus: plan.modus, name: `${plan.start.name} → ${plan.ziel.name}`, ohneAutobahn: plan.modus !== 'schnell' && x.ohneAutobahn }));
   });
 }
 
@@ -1180,7 +1239,7 @@ async function ladeWetter() {
 async function routeSpeichern(r) {
   const name = await eingabe('Route speichern', 'Name der Route', r.name || 'Meine Route');
   if (name === null) return;
-  const obj = { id: uid(), name: name.trim() || 'Route', erstellt: Date.now(), modus: r.modus, waypoints: r.waypoints || [], geometry: r.geometry, distance: r.distance, duration: r.duration, kurv: r.kurv, sterne: r.sterne };
+  const obj = { id: uid(), name: name.trim() || 'Route', erstellt: Date.now(), modus: r.modus, waypoints: r.waypoints || [], geometry: r.geometry, distance: r.distance, duration: r.duration, kurv: r.kurv, sterne: r.sterne, steps: r.steps || null, ohneAutobahn: !!r.ohneAutobahn };
   await Speicher.setze('routes', obj);
   cache.routes.push(obj);
   renderRoutenListe(); toast('Route gespeichert.');
@@ -1440,20 +1499,30 @@ function fahrKarteInit() {
   trackLinie = L.polyline([], { color: farbe('--track') || '#0b5cad', weight: 6, interactive: false }).addTo(fahrKarte);
   fahrKarte.on('dragstart', () => { folgen = false; $('#btnZentrieren').hidden = false; });
 }
-function setAktiveRoute(r) {
+// opt.planBehalten: geplante Werte der Fahrt nicht ändern (z. B. bei Neuberechnung oder Umweg zur Tankstelle)
+function setAktiveRoute(r, opt = {}) {
   if (!r || !r.geometry || r.geometry.length < 2) {
     aktiveRoute = null;
     if (routeLinie) routeLinie.setLatLngs([]);
-    if (rec) rec.plan = null;
+    if (rec && !opt.planBehalten) rec.plan = null;
+    navStoppen();
   } else {
     const cum = kumuliert(r.geometry);
     const a = ll(r.geometry[0]), b = ll(r.geometry[r.geometry.length - 1]);
-    aktiveRoute = { id: r.id || null, quelle: r.quelle || null, name: r.name, geometry: r.geometry, distance: r.distance, duration: r.duration, cum, geoLaenge: cum[cum.length - 1] || 1, idx: 0, gefunden: false, rest: null, rundkurs: distanz(a, b) < 300 };
+    const ohneAB = typeof r.ohneAutobahn === 'boolean' ? r.ohneAutobahn : (r.modus && r.modus !== 'schnell' && r.modus !== 'gpx');
+    aktiveRoute = {
+      id: r.id || null, quelle: r.quelle || null, name: r.name, geometry: r.geometry, distance: r.distance, duration: r.duration,
+      cum, geoLaenge: cum[cum.length - 1] || 1, idx: 0, gefunden: false, rest: null, along: 0, querab: 0,
+      rundkurs: distanz(a, b) < 300 && !opt.neuBerechnet,
+      waypoints: r.waypoints || [], modus: r.modus || '', ohneAutobahn: !!ohneAB, steps: r.steps || null,
+      schritte: schritteVorbereiten(r.steps, r.geometry, cum)
+    };
     if (routeLinie) {
       routeLinie.setLatLngs(r.geometry);
       if (!rec) { try { fahrKarte.fitBounds(routeLinie.getBounds(), { padding: [20, 20] }); } catch (e) {} }
     }
-    if (rec) rec.plan = { routeId: aktiveRoute.id, name: r.name, duration: r.duration, distance: r.distance };
+    if (rec && !opt.planBehalten) rec.plan = { routeId: aktiveRoute.id, name: r.name, duration: r.duration, distance: r.distance };
+    nav.naechster = 0; nav.angesagt = {}; nav.abseitsSeit = null; nav.ziel = false;
   }
   renderRoutenAuswahl(); fahrUIAktualisieren(true);
 }
@@ -1472,6 +1541,7 @@ function routeAuswahlGeaendert() {
   if (v === '') setAktiveRoute(null);
   else if (v === '__plan') { const r = plan.ergebnisse[plan.gewaehlt]; if (r) setAktiveRoute({ ...r, quelle: r }); }
   else if (v !== '__aktiv') setAktiveRoute(cache.routes.find(r => r.id === v));
+  if (rec) navStarten();
 }
 function fahrBikeAnzeigen() {
   const b = aktivesBike();
@@ -1493,6 +1563,10 @@ async function fahrtStarten(demoModus = false) {
   if (trackLinie) trackLinie.setLatLngs([]);
   if (demoModus) demoStarten(); else gpsStarten();
   tickTimer = setInterval(tick, 500);
+  // Sprachausgabe hier (direkt nach dem Tippen) starten – iPhones erlauben sie sonst nicht
+  const mitNavi = !!(einst.abbiegen && aktiveRoute);
+  sprechen(mitNavi ? 'Navigation gestartet.' : 'Fahrt gestartet.', true);
+  if (mitNavi) { ansicht = 'navi'; ansichtAnwenden(); navStarten(); }
   steuerungAnzeigen(); fahrUIAktualisieren(true);
   await wakeLockAnfordern();
   if (!('wakeLock' in navigator)) toast('Dein Browser kann den Bildschirm nicht wachhalten – stell das Display-Timeout hoch.', 6000);
@@ -1556,6 +1630,7 @@ function fixVerarbeiten(pos) {
   rec.tempo = vs;
   positionZeigen(p);
   fahrsperrePruefen(vs);
+  tempolimitPruefen(p);
   if (rec.zustand !== 'faehrt') return;
 
   // Auto-Pause: länger als 60 s unter 3 km/h → Pause (die Stehzeit wird abgezogen)
@@ -1584,25 +1659,57 @@ function fixVerarbeiten(pos) {
     // Top-Speed erst, wenn mind. 3 Werte im Mittelwert stecken
     if (rec.puffer.length >= 3 && vs > rec.maxSpeed) { rec.maxSpeed = vs; rec.maxSpeedPos = [pt.lat, pt.lon]; }
   }
-  routeFortschritt(p);
+  routeFortschritt(p, vs);
 }
 function positionZeigen(p) {
   if (!fahrKarte) return;
   if (!posMarker) posMarker = L.circleMarker([p.lat, p.lon], { radius: 10, color: '#fff', weight: 3, fillColor: '#0b5cad', fillOpacity: 1, interactive: false }).addTo(fahrKarte);
   else posMarker.setLatLng([p.lat, p.lon]);
-  if (folgen) fahrKarte.setView([p.lat, p.lon], Math.max(fahrKarte.getZoom(), 15), { animate: false });
+  if (folgen) {
+    // Auto-Zoom: je schneller, desto weiter raus (wie bei Navi-Apps)
+    let z = Math.max(fahrKarte.getZoom(), 15);
+    if (einst.autoZoom !== false && rec) { const v = rec.tempo; z = v < 30 ? 17 : v < 60 ? 16 : v < 95 ? 15 : 14; }
+    fahrKarte.setView([p.lat, p.lon], z, { animate: false });
+  }
 }
-// Restdistanz zur geplanten Route: nächster Punkt auf der Linie suchen
-function routeFortschritt(p) {
+// Position auf die Routenlinie projizieren: Abstand zur Linie und gefahrene Strecke entlang der Route
+function projektion(p, g, cum, idx) {
+  let best = { d: Infinity, along: cum[idx] };
+  const kx = 111320 * Math.cos(rad(p.lat)), ky = 110540; // Meter pro Grad (lokal)
+  for (let i = Math.max(0, idx - 2); i < Math.min(g.length - 1, idx + 2); i++) {
+    const ax = (g[i][1] - p.lon) * kx, ay = (g[i][0] - p.lat) * ky;
+    const bx = (g[i + 1][1] - p.lon) * kx, by = (g[i + 1][0] - p.lat) * ky;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < best.d) best = { d, along: cum[i] + t * (cum[i + 1] - cum[i]) };
+  }
+  return best;
+}
+// Fortschritt auf der geplanten Route: Restdistanz, Abstand zur Linie, Navigation
+function routeFortschritt(p, vs) {
   const r = aktiveRoute; if (!r) return;
   const g = r.geometry, n = g.length;
   let von = Math.max(0, r.idx - 30), bis = Math.min(n - 1, r.idx + 400);
   if (!r.gefunden) { von = 0; bis = r.rundkurs ? Math.floor(n * 0.25) : n - 1; } // Rundkurs: nicht am Ende "ankommen"
   let best = r.idx, bd = Infinity;
   for (let i = von; i <= bis; i++) { const d = distanz(p, ll(g[i])); if (d < bd) { bd = d; best = i; } }
-  if (bd > 300 && r.gefunden && !r.rundkurs) { for (let i = 0; i < n; i++) { const d = distanz(p, ll(g[i])); if (d < bd) { bd = d; best = i; } } }
-  r.idx = best; r.gefunden = true; r.abseits = bd > 300;
-  r.rest = Math.max(0, r.geoLaenge - r.cum[best]);
+  let pr = projektion(p, g, r.cum, best);
+  if (pr.d > 300 && r.gefunden && !r.rundkurs) { // weit weg (z. B. Abkürzung) → ganze Route durchsuchen
+    for (let i = 0; i < n; i++) { const d = distanz(p, ll(g[i])); if (d < bd) { bd = d; best = i; } }
+    pr = projektion(p, g, r.cum, best);
+  }
+  r.idx = best; r.gefunden = true; r.querab = pr.d; r.abseits = pr.d > 300;
+  r.along = Math.max(0, Math.min(r.geoLaenge, pr.along));
+  r.rest = Math.max(0, r.geoLaenge - r.along);
+  navAktualisieren(p, vs || 0);
+}
+// Restzeit zur geplanten Route in Sekunden (mit persönlichem Zeitfaktor)
+function restSekunden() {
+  if (!aktiveRoute) return 0;
+  const rest = aktiveRoute.rest == null ? aktiveRoute.geoLaenge : aktiveRoute.rest;
+  const f = zeitFaktor();
+  return aktiveRoute.duration * (rest / aktiveRoute.geoLaenge) * (f ? f.faktor : 1);
 }
 // Fahrsperre: ab 10 km/h nur noch Pause/Stopp. Aufheben nach 5 s unter 10 km/h.
 function fahrsperrePruefen(vs) {
@@ -1647,11 +1754,8 @@ function fahrUIAktualisieren(sofort) {
     const rest = aktiveRoute.rest == null ? aktiveRoute.geoLaenge : aktiveRoute.rest;
     $('#wRest').textContent = zahl(rest / 1000, 1);
     $('#wRestLabel').textContent = aktiveRoute.abseits ? 'Rest km (abseits!)' : 'Rest km';
-    if (r) {
-      const f = zeitFaktor();
-      const sek = aktiveRoute.duration * (rest / aktiveRoute.geoLaenge) * (f ? f.faktor : 1);
-      $('#wAnkunft').textContent = fmtZeit(jetzt() + sek * 1000);
-    } else $('#wAnkunft').textContent = fmtDauer(aktiveRoute.duration * 1000);
+    if (r) $('#wAnkunft').textContent = fmtZeit(jetzt() + restSekunden() * 1000);
+    else $('#wAnkunft').textContent = fmtDauer(aktiveRoute.duration * 1000);
   }
   // Schräglage
   $('#leanWerte').hidden = !einst.schraeglage;
@@ -1660,6 +1764,23 @@ function fahrUIAktualisieren(sofort) {
     $('#wLeanMax').textContent = r ? `${Math.round(r.leanL)}° / ${Math.round(r.leanR)}°` : '–';
   }
   if (r) $('#btnPause').innerHTML = r.zustand === 'pause' ? '▶<span>Weiter</span>' : '⏸<span>Pause</span>';
+  // Tacho unten links (Navi-Ansicht), Tempolimit und Infozeile wie bei Google Maps
+  const zuSchnell = !!(r && einst.tempolimit && limit.wert && r.tempo > limit.wert * 1.05 + 2);
+  $('#tachoBubble').hidden = ansicht !== 'navi';
+  $('#bTempo').textContent = r ? Math.round(r.tempo) : '0';
+  $('#tachoBubble').classList.toggle('zu-schnell', zuSchnell);
+  $('.tempo').classList.toggle('zu-schnell', zuSchnell);
+  $('#limitSchild').hidden = !(einst.tempolimit && r && limit.wert);
+  if (limit.wert) $('#limitWert').textContent = limit.wert;
+  $('#navInfo').hidden = ansicht !== 'navi';
+  if (ansicht === 'navi') {
+    if (aktiveRoute) {
+      const rest = aktiveRoute.rest == null ? aktiveRoute.geoLaenge : aktiveRoute.rest, sek = restSekunden();
+      $('#navInfo').innerHTML = `<span>${r ? fmtZeit(jetzt() + sek * 1000) : '–'}<small>Ankunft</small></span><span>${fmtDauer(sek * 1000)}<small>Restzeit</small></span><span>${zahl(rest / 1000, 1)}<small>${aktiveRoute.abseits ? 'km (abseits)' : 'km'}</small></span>`;
+    } else {
+      $('#navInfo').innerHTML = `<span>${fmtUhr(r ? r.fahrMs : 0)}<small>Fahrzeit</small></span><span>${zahl((r ? r.distanz : 0) / 1000, 1)}<small>km</small></span><span>${r && r.fahrMs > 30000 ? zahl(r.distanz / 1000 / (r.fahrMs / 3600000), 0) : '0'}<small>Ø km/h</small></span>`;
+    }
+  }
   // Spur auf der Karte (gedrosselt, damit es flüssig bleibt)
   if (trackLinie && r && (sofort || Date.now() - linieZuletzt > 1500)) {
     linieZuletzt = Date.now();
@@ -1700,7 +1821,8 @@ async function fahrtStoppen() {
   if (ok && rec) await fahrtAbschliessen();
 }
 function aufzeichnungBeendenTechnisch() {
-  gpsStoppen(); demoStoppen(); wakeLockFreigeben();
+  gpsStoppen(); demoStoppen(); wakeLockFreigeben(); navStoppen();
+  limit.wert = null; limit.zuletztPos = null; limit.zuletztZeit = 0;
   if (aktiveRoute) { aktiveRoute.rest = null; aktiveRoute.idx = 0; aktiveRoute.gefunden = false; aktiveRoute.abseits = false; }
   clearInterval(tickTimer); tickTimer = null;
   sperreSetzen(false); gpsStatus('GPS aus', '');
@@ -1791,6 +1913,7 @@ function piep() {
 function pausenErinnerung() {
   $('#pausenBanner').hidden = false;
   piep();
+  sprechen('Du fährst seit zwei Stunden. Zeit für eine Pause.');
   try { if (navigator.vibrate) navigator.vibrate([400, 150, 400]); } catch (e) {}
 }
 
@@ -1842,8 +1965,293 @@ async function absturzPruefen() {
   zeigeTab('fahren');
   if (window.isSecureContext && 'geolocation' in navigator) gpsStarten(); else gpsStatus('GPS nicht verfügbar', 'bad');
   tickTimer = setInterval(tick, 500);
+  if (einst.abbiegen && aktiveRoute) { ansicht = 'navi'; ansichtAnwenden(); navStarten(); }
   steuerungAnzeigen(); fahrUIAktualisieren(true);
   await wakeLockAnfordern();
+}
+
+/* ===================== 9b) NAVIGATION ===================== */
+// Ansicht im Tab Fahren: 'tacho' (große Zahlen) oder 'navi' (große Karte wie bei Google Maps)
+let ansicht = 'tacho';
+function ansichtAnwenden() {
+  const navi = ansicht === 'navi';
+  document.body.classList.toggle('navi-ansicht', navi);
+  const b = $('#btnAnsicht');
+  b.textContent = navi ? '⏱️' : '🗺️';
+  b.setAttribute('aria-label', navi ? 'Zur Tacho-Ansicht wechseln' : 'Zur Navi-Ansicht wechseln');
+  fahrUIAktualisieren(true);
+  setTimeout(kartenAktualisieren, 60);
+}
+function ansichtWechseln() { ansicht = ansicht === 'navi' ? 'tacho' : 'navi'; einst.fahrAnsicht = ansicht; einstSpeichern(); ansichtAnwenden(); }
+function uebersichtZeigen() {
+  if (!fahrKarte) return;
+  const linie = aktiveRoute ? routeLinie : trackLinie;
+  try {
+    if (linie && linie.getLatLngs().flat(2).length) fahrKarte.fitBounds(linie.getBounds(), { padding: [30, 30] });
+    else if (letztePosition) fahrKarte.setView([letztePosition.lat, letztePosition.lon], 13);
+    else return toast('Noch keine Route oder Position.');
+  } catch (e) { return; }
+  folgen = false; $('#btnZentrieren').hidden = false;
+}
+
+// --- Sprachausgabe (Web Speech API) ---
+const sprachOk = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+let deutscheStimme = null;
+function stimmeWaehlen() { try { deutscheStimme = speechSynthesis.getVoices().find(v => /^de([-_]|$)/i.test(v.lang)) || null; } catch (e) {} }
+if (sprachOk) { stimmeWaehlen(); try { speechSynthesis.addEventListener('voiceschanged', stimmeWaehlen); } catch (e) {} }
+function sprechenRoh(text, dringend) {
+  if (!sprachOk || !text) return false;
+  try {
+    if (dringend) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'de-DE'; u.rate = 1.05;
+    if (deutscheStimme) u.voice = deutscheStimme;
+    speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+// Spricht nur, wenn Abbiege- und Sprachassistent eingeschaltet sind
+function sprechen(text, dringend = false) { if (einst.abbiegen && einst.sprache) sprechenRoh(text, dringend); }
+
+// --- Abbiegehinweise aus OSRM ---
+const RICHTUNG = { left: 'links', right: 'rechts', 'slight left': 'leicht links', 'slight right': 'leicht rechts', 'sharp left': 'scharf links', 'sharp right': 'scharf rechts', straight: 'geradeaus', uturn: 'wenden' };
+const PFEIL = { left: '↰', right: '↱', 'slight left': '↖', 'slight right': '↗', 'sharp left': '↙', 'sharp right': '↘', straight: '↑', uturn: '↶' };
+const ORDINAL = ['', 'erste', 'zweite', 'dritte', 'vierte', 'fünfte', 'sechste', 'siebte', 'achte'];
+const gross1 = t => t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+const klein1 = t => t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+// OSRM-Route → kompakte Liste der Manöver (nur das Nötige, damit gespeicherte Routen klein bleiben)
+function schritteAus(route) {
+  const legs = (route && route.legs) || [], out = [];
+  legs.forEach((leg, li) => (leg.steps || []).forEach(st => {
+    const m = st.maneuver || {};
+    if (!Array.isArray(m.location)) return;
+    if (m.type === 'depart' && out.length) return; // "Losfahren" nur ganz am Anfang
+    out.push({ lat: m.location[1], lon: m.location[0], typ: m.type || '', mod: m.modifier || '', exit: m.exit || 0, name: st.name || '', ref: st.ref || '', dist: st.distance || 0, letzter: m.type === 'arrive' && li === legs.length - 1 });
+  }));
+  return out.length ? out : null;
+}
+// Jedem Manöver seine Position entlang der Routenlinie zuordnen (in Metern ab Start)
+function schritteVorbereiten(steps, geo, cum) {
+  if (!Array.isArray(steps) || !steps.length || !geo || geo.length < 2) return null;
+  const out = []; let erwartet = 0, lo = 0;
+  for (const st of steps) {
+    const tol = 300 + erwartet * 0.05;
+    while (lo < cum.length - 1 && cum[lo] < erwartet - tol) lo++;
+    let best = lo, bd = Infinity;
+    for (let i = lo; i < cum.length && cum[i] <= erwartet + tol; i++) { const d = distanz(st, ll(geo[i])); if (d < bd) { bd = d; best = i; } }
+    if (bd > 200) { for (let i = 0; i < cum.length; i++) { const d = distanz(st, ll(geo[i])); if (d < bd) { bd = d; best = i; } } } // Notlösung
+    out.push({ ...st, cumAt: cum[best] });
+    erwartet = cum[best] + (st.dist || 0);
+  }
+  return out;
+}
+// Manöver ohne Ansage (geradeaus weiter, Straßenname ändert sich …)
+const istStumm = st => ['depart', 'new name', 'notification', 'use lane'].includes(st.typ) || (st.typ === 'continue' && (!st.mod || st.mod === 'straight'));
+function anweisung(st) {
+  const strasse = st.name || st.ref || '', auf = strasse ? ` auf ${strasse}` : '', r = RICHTUNG[st.mod] || '';
+  switch (st.typ) {
+    case 'arrive': return st.letzter ? 'Ziel erreicht' : 'Zwischenziel erreicht';
+    case 'depart': return `Losfahren${auf}`;
+    case 'roundabout': case 'rotary': case 'roundabout turn':
+      return st.exit ? `Im Kreisverkehr die ${ORDINAL[st.exit] || st.exit + '.'} Ausfahrt nehmen${auf}` : `In den Kreisverkehr fahren${auf}`;
+    case 'exit roundabout': case 'exit rotary': return `Kreisverkehr verlassen${auf}`;
+    case 'fork': return `An der Gabelung ${r || 'geradeaus'} halten${auf}`;
+    case 'merge': return `Einfädeln${auf}`;
+    case 'on ramp': return `Auffahrt nehmen${auf}`;
+    case 'off ramp': return `Ausfahrt ${r ? r + ' ' : ''}nehmen${auf}`;
+    case 'end of road': return st.mod === 'uturn' ? 'Wenden' : `Am Ende der Straße ${r || 'weiter'} abbiegen${auf}`;
+    case 'continue': case 'new name': return st.mod === 'uturn' ? 'Wenden' : (st.mod && st.mod !== 'straight' ? `${gross1(r)} halten${auf}` : `Weiter${auf}`);
+    default:
+      if (st.mod === 'uturn') return 'Wenden';
+      if (!r || st.mod === 'straight') return `Geradeaus weiter${auf}`;
+      return `${gross1(r)} abbiegen${auf}`;
+  }
+}
+function pfeil(st) {
+  if (st.typ === 'arrive') return '🏁';
+  if (['roundabout', 'rotary', 'roundabout turn', 'exit roundabout', 'exit rotary'].includes(st.typ)) return '⟳' + (st.exit ? st.exit : '');
+  return PFEIL[st.mod] || '↑';
+}
+const navDistText = m => m < 100 ? Math.max(10, Math.round(m / 10) * 10) + ' m' : m < 1000 ? Math.round(m / 50) * 50 + ' m' : zahl(m / 1000, 1) + ' km';
+const distSprech = m => m < 950 ? `${Math.max(50, Math.round(m / 50) * 50)} Metern` : m < 1500 ? 'einem Kilometer' : `${zahl(m / 1000, 1).replace(',0', '')} Kilometern`;
+
+// --- Navigationszustand ---
+const nav = { aktiv: false, naechster: 0, angesagt: {}, abseitsSeit: null, letzteNeu: 0, rechnet: false, ziel: false };
+async function navStarten() {
+  nav.aktiv = false;
+  if (!einst.abbiegen || !rec || !aktiveRoute) { navStoppen(); return; }
+  if (!aktiveRoute.schritte) {
+    // Ältere gespeicherte Route ohne Abbiegehinweise: einmal neu berechnen
+    const r = aktiveRoute;
+    if (r.waypoints && r.waypoints.length >= 2 && r.modus !== 'gpx') {
+      try {
+        toast('Abbiegehinweise werden geladen …');
+        const neu = (await osrmSicher(r.waypoints.map(w => ({ lat: w.lat, lon: w.lon })), { ohneAutobahn: r.ohneAutobahn }))[0];
+        if (!rec || aktiveRoute !== r) return;
+        setAktiveRoute({ ...neu, id: r.id, name: r.name, waypoints: r.waypoints, modus: r.modus, ohneAutobahn: r.ohneAutobahn, quelle: r.quelle }, { planBehalten: true });
+        toast('Route für die Navigation neu berechnet.');
+      } catch (e) { toast('Abbiegehinweise konnten nicht geladen werden – die Aufzeichnung läuft weiter.', 5000); return; }
+    }
+    if (!aktiveRoute || !aktiveRoute.schritte) { toast('Für diese Route gibt es keine Abbiegehinweise (z. B. GPX-Spur).', 5000); return; }
+  }
+  nav.aktiv = true; nav.naechster = 0; nav.angesagt = {}; nav.abseitsSeit = null; nav.ziel = false; nav.rechnet = false;
+  document.body.classList.add('nav-banner-an');
+  $('#navBanner').hidden = false;
+  navAnzeigen(null, 0, null);
+}
+function navStoppen() {
+  nav.aktiv = false; nav.rechnet = false;
+  document.body.classList.remove('nav-banner-an');
+  const b = $('#navBanner'); if (b) b.hidden = true;
+  try { if (sprachOk) speechSynthesis.cancel(); } catch (e) {}
+}
+function navAnzeigen(st, d, dann) {
+  if (!nav.aktiv) return;
+  $('#navBanner').classList.toggle('neu', nav.rechnet || !!(aktiveRoute && aktiveRoute.querab > 50 && nav.abseitsSeit !== null));
+  const setze = (pf, di, tx, dn) => { $('#navPfeil').textContent = pf; $('#navDist').textContent = di; $('#navText').textContent = tx; $('#navDann').hidden = !dn; if (dn) $('#navDann').textContent = dn; };
+  if (nav.rechnet) return setze('⟲', 'Neue Route', 'wird berechnet …');
+  if (nav.ziel) return setze('🏁', 'Ziel erreicht', 'Mit STOPP beenden, wenn du fertig bist.');
+  if (!st) return setze('↑', 'Navigation', 'Warte auf GPS …');
+  if (aktiveRoute && aktiveRoute.querab > 50 && nav.abseitsSeit !== null) return setze('↺', 'Abseits der Route', 'Route wird gleich neu berechnet …');
+  setze(pfeil(st), navDistText(d), anweisung(st), dann ? `Dann ${pfeil(dann)} ${klein1(anweisung(dann))}` : '');
+}
+// Wird bei jedem GPS-Punkt aufgerufen: nächstes Manöver, Ansagen, Abweichung erkennen
+function navAktualisieren(p, vs) {
+  if (!nav.aktiv || !aktiveRoute || !aktiveRoute.schritte || nav.rechnet) return;
+  const r = aktiveRoute, S = r.schritte, along = r.along || 0;
+  // Abseits der Route (mehr als 50 m) und in Bewegung → nach 8 s neu berechnen
+  if (r.querab > 50 && vs > 5 && !nav.ziel) {
+    if (nav.abseitsSeit === null) nav.abseitsSeit = jetzt();
+    else if (jetzt() - nav.abseitsSeit > 8000) neuBerechnen(p);
+  } else nav.abseitsSeit = null;
+  // Nächstes wichtiges Manöver suchen (bereits passierte überspringen)
+  let k = nav.naechster;
+  while (k < S.length && (istStumm(S[k]) || S[k].cumAt < along - 15)) k++;
+  nav.naechster = k;
+  if (!nav.ziel && along >= r.geoLaenge - 25) { nav.ziel = true; sprechen('Du hast dein Ziel erreicht.', true); }
+  if (k >= S.length) { navAnzeigen(nav.ziel ? null : S[S.length - 1], 0, null); return; }
+  const st = S[k], d = Math.max(0, st.cumAt - along);
+  let dann = null; // folgt das nächste Manöver kurz danach? → "dann …"
+  for (let j = k + 1; j < S.length; j++) { if (istStumm(S[j])) continue; if (S[j].cumAt - st.cumAt < 200) dann = S[j]; break; }
+  navAnzeigen(st, d, dann);
+  if (nav.ziel) return;
+  // Ansagen: früh (abhängig vom Tempo) und "jetzt"
+  const v = Math.max(vs / 3.6, 8), fern = Math.max(250, v * 18), nah = Math.max(35, v * 4);
+  const merk = nav.angesagt[k] || (nav.angesagt[k] = {});
+  if (st.typ === 'arrive') {
+    if (d <= nah && !merk.nah) {
+      merk.nah = merk.fern = true;
+      if (st.letzter) { nav.ziel = true; sprechen('Du hast dein Ziel erreicht.', true); navAnzeigen(st, d, null); }
+      else sprechen('Zwischenziel erreicht.', true);
+    } else if (d <= fern && d > nah + 30 && !merk.fern) { merk.fern = true; sprechen(`In ${distSprech(d)} ${st.letzter ? 'erreichst du dein Ziel' : 'erreichst du ein Zwischenziel'}.`); }
+    return;
+  }
+  const dannTxt = dann ? `, dann ${klein1(anweisung(dann))}` : '';
+  if (d <= nah && !merk.nah) { merk.nah = merk.fern = true; sprechen(`Jetzt ${klein1(anweisung(st))}${dannTxt}.`, true); }
+  else if (d <= fern && d > nah + 30 && !merk.fern) { merk.fern = true; sprechen(`In ${distSprech(d)} ${klein1(anweisung(st))}${dannTxt}.`); }
+}
+// Neue Route ab der aktuellen Position zu den restlichen Zielen (höchstens alle 30 s)
+async function neuBerechnen(p) {
+  const r = aktiveRoute;
+  if (!r || nav.rechnet || jetzt() - nav.letzteNeu < 30000) return;
+  if (!navigator.onLine) { nav.letzteNeu = jetzt(); return toast('Offline – Route kann nicht neu berechnet werden.'); }
+  const ziele = r.schritte.filter(x => x.typ === 'arrive' && x.cumAt > r.along + 50).map(x => ({ lat: x.lat, lon: x.lon }));
+  if (!ziele.length) return;
+  nav.rechnet = true; nav.letzteNeu = jetzt();
+  navAnzeigen(null, 0, null); sprechen('Route wird neu berechnet.', true);
+  try {
+    const neu = (await osrmSicher([{ lat: p.lat, lon: p.lon }, ...ziele], { ohneAutobahn: r.ohneAutobahn }))[0];
+    if (!rec || aktiveRoute !== r) return;
+    nav.rechnet = false;
+    setAktiveRoute({ ...neu, id: r.id, name: r.name, waypoints: r.waypoints, modus: r.modus, ohneAutobahn: r.ohneAutobahn, quelle: r.quelle }, { planBehalten: true, neuBerechnet: true });
+    toast('Neue Route berechnet.');
+  } catch (e) {
+    toast('Neuberechnung fehlgeschlagen – nächster Versuch in 30 Sekunden.', 4500);
+  } finally { nav.rechnet = false; nav.abseitsSeit = null; }
+}
+
+// --- Tempolimit aus OpenStreetMap (experimentell) ---
+const limit = { wert: null, zuletztPos: null, zuletztZeit: 0, laeuft: false };
+function maxspeedLesen(v) {
+  if (!v) return null;
+  v = String(v).trim().toLowerCase();
+  const zonen = { 'de:urban': 50, 'de:rural': 100, 'de:living_street': 7, 'de:bicycle_road': 30, 'de:zone30': 30, 'de:zone:30': 30 };
+  if (zonen[v] != null) return zonen[v];
+  const m = v.match(/^(\d+)\s*(mph)?/);
+  if (!m) return null; // z. B. "none", "signals", "DE:motorway"
+  return m[2] ? Math.round(+m[1] * 1.609) : +m[1];
+}
+function abstandZuLinie(p, pts) {
+  let best = Infinity;
+  const kx = 111320 * Math.cos(rad(p.lat)), ky = 110540;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const ax = (pts[i].lon - p.lon) * kx, ay = (pts[i].lat - p.lat) * ky, bx = (pts[i + 1].lon - p.lon) * kx, by = (pts[i + 1].lat - p.lat) * ky;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+async function tempolimitPruefen(p) {
+  if (!einst.tempolimit || !rec || limit.laeuft || !navigator.onLine) return;
+  const t = Date.now(), weg = limit.zuletztPos ? distanz(limit.zuletztPos, p) : Infinity;
+  if (t - limit.zuletztZeit < 15000 || (weg < 150 && t - limit.zuletztZeit < 60000)) return; // sparsam abfragen
+  limit.laeuft = true; limit.zuletztZeit = t; limit.zuletztPos = { lat: p.lat, lon: p.lon };
+  try {
+    const q = `[out:json][timeout:10];way(around:30,${p.lat.toFixed(5)},${p.lon.toFixed(5)})[highway][maxspeed];out tags geom;`;
+    const d = await holeJSON(`${OVERPASS_URL}?data=${encodeURIComponent(q)}`, 12000);
+    let best = null, bd = Infinity;
+    (d.elements || []).forEach(w => { if (!w.geometry || !w.tags) return; const a = abstandZuLinie(p, w.geometry); if (a < bd) { bd = a; best = w; } });
+    limit.wert = best ? maxspeedLesen(best.tags.maxspeed) : null;
+  } catch (e) { /* kein Limit bekannt – Anzeige bleibt leer */ limit.wert = null; }
+  finally { limit.laeuft = false; fahrUIAktualisieren(false); }
+}
+
+// --- Tankstellen in der Nähe (OpenStreetMap über Overpass) ---
+let tankLayer = null, tankSucheLaeuft = false;
+async function tankstellenSuchen() {
+  if (tankSucheLaeuft) return;
+  tankSucheLaeuft = true;
+  try {
+    let p = letztePosition && jetzt() - letztePosition.t < 120000 ? letztePosition : null;
+    if (!p) {
+      try { toast('Standort wird bestimmt …'); p = await aktuellePosition(); }
+      catch (e) { return dialog({ titel: 'Tankstellen', html: `<p>${esc(e.message)}</p>` }); }
+    }
+    toast('Suche Tankstellen …');
+    let liste = [];
+    for (const radius of [5000, 15000]) {
+      const q = `[out:json][timeout:20];(node[amenity=fuel](around:${radius},${p.lat.toFixed(5)},${p.lon.toFixed(5)});way[amenity=fuel](around:${radius},${p.lat.toFixed(5)},${p.lon.toFixed(5)}););out center 50;`;
+      let d;
+      try { d = await holeJSON(`${OVERPASS_URL}?data=${encodeURIComponent(q)}`, 25000); }
+      catch (e) { return dialog({ titel: 'Tankstellen', html: `<p>Suche fehlgeschlagen: ${esc(e.message)}</p>` }); }
+      liste = (d.elements || []).map(e => {
+        const lat = e.lat != null ? e.lat : e.center && e.center.lat, lon = e.lon != null ? e.lon : e.center && e.center.lon;
+        const tg = e.tags || {};
+        return { lat, lon, name: tg.name || tg.brand || 'Tankstelle', marke: tg.name && tg.brand && tg.brand !== tg.name ? tg.brand : '', zeiten: tg.opening_hours || '' };
+      }).filter(x => isFinite(x.lat) && isFinite(x.lon)).map(x => ({ ...x, d: distanz(p, x) })).sort((a, b) => a.d - b.d).slice(0, 6);
+      if (liste.length) break;
+    }
+    if (!liste.length) return dialog({ titel: 'Tankstellen', html: '<p>Keine Tankstelle im Umkreis von 15 km gefunden (laut OpenStreetMap).</p>' });
+    // Auf der Karte zeigen
+    if (fahrKarte) {
+      if (tankLayer) tankLayer.remove();
+      tankLayer = L.layerGroup(liste.map(x => L.marker([x.lat, x.lon], { icon: pinIcon('⛽', 'pin-top'), keyboard: false }).bindTooltip(x.name))).addTo(fahrKarte);
+    }
+    const wahl = await dialog({
+      titel: '⛽ Tankstellen in der Nähe',
+      html: '<p class="klein">Luftlinie, laut OpenStreetMap. Öffnungszeiten ohne Gewähr.</p>' + liste.map((x, i) => `<p><b>${i + 1}. ${esc(x.name)}</b>${x.marke ? ' (' + esc(x.marke) + ')' : ''} – ${zahl(x.d / 1000, 1)} km${x.zeiten ? `<br><span class="klein">${esc(x.zeiten)}</span>` : ''}</p>`).join(''),
+      knoepfe: [...liste.map((x, i) => ({ text: `${i + 1}. Hinfahren (${zahl(x.d / 1000, 1)} km)`, wert: i, art: i === 0 ? 'primary' : '' })), { text: 'Schließen', wert: null }]
+    });
+    if (wahl === null || wahl === undefined) return;
+    const ziel = liste[wahl];
+    try {
+      const r = (await osrmSicher([{ lat: p.lat, lon: p.lon }, { lat: ziel.lat, lon: ziel.lon }], { ohneAutobahn: false }))[0];
+      setAktiveRoute({ ...r, name: 'Tankstelle: ' + ziel.name, waypoints: [{ lat: p.lat, lon: p.lon, name: 'Mein Standort' }, { lat: ziel.lat, lon: ziel.lon, name: ziel.name }], modus: 'schnell' }, { planBehalten: true });
+      if (rec) navStarten();
+      toast(rec ? 'Route zur Tankstelle aktiv.' : 'Route zur Tankstelle aktiv – mit START losfahren.', 4500);
+    } catch (e) { dialog({ titel: 'Tankstellen', html: `<p>Route konnte nicht berechnet werden: ${esc(e.message)}</p>` }); }
+  } finally { tankSucheLaeuft = false; }
 }
 
 /* ===================== 10) DEMO-FAHRT (Fake-GPS) ===================== */
@@ -2180,6 +2588,10 @@ function einstFormularFuellen() {
   $('#nfName').value = n.name || ''; $('#nfKontakt').value = n.kontakt || ''; $('#nfTel').value = n.tel || '';
   $('#nfBlut').value = n.blut || ''; $('#nfMed').value = n.med || '';
   $('#chkLean').checked = !!einst.schraeglage;
+  $('#chkAbbiegen').checked = !!einst.abbiegen;
+  $('#chkSprache').checked = !!einst.sprache; $('#chkSprache').disabled = !einst.abbiegen;
+  $('#chkAutoZoom').checked = einst.autoZoom !== false;
+  $('#chkTempolimit').checked = !!einst.tempolimit;
 }
 async function notfallSpeichern() {
   einst.notfall = { name: $('#nfName').value.trim(), kontakt: $('#nfKontakt').value.trim(), tel: $('#nfTel').value.trim(), blut: $('#nfBlut').value, med: $('#nfMed').value.trim() };
@@ -2313,6 +2725,20 @@ function ereignisseBinden() {
   $('#btnNfSpeichern').onclick = notfallSpeichern;
   $('#btnNfZeigen').onclick = notfallZeigen;
   $('#chkLean').onchange = async e => { einst.schraeglage = e.target.checked; await einstSpeichern(); fahrUIAktualisieren(true); };
+  // Navigation
+  $('#chkAbbiegen').onchange = async e => {
+    einst.abbiegen = e.target.checked; if (!einst.abbiegen) einst.sprache = false;
+    await einstSpeichern(); einstFormularFuellen();
+    if (rec) { if (einst.abbiegen) navStarten(); else navStoppen(); }
+    toast(einst.abbiegen ? 'Abbiegeassistent an – gilt bei Fahrten mit geplanter Route.' : 'Abbiegeassistent aus.');
+  };
+  $('#chkSprache').onchange = async e => { einst.sprache = e.target.checked; await einstSpeichern(); if (einst.sprache) sprechenRoh('Sprachassistent ist an.', true); };
+  $('#btnSpracheTest').onclick = () => { if (!sprechenRoh('In 300 Metern rechts abbiegen.', true)) toast('Dein Browser kann leider nicht vorlesen.'); };
+  $('#chkAutoZoom').onchange = async e => { einst.autoZoom = e.target.checked; await einstSpeichern(); };
+  $('#chkTempolimit').onchange = async e => { einst.tempolimit = e.target.checked; limit.wert = null; limit.zuletztZeit = 0; await einstSpeichern(); fahrUIAktualisieren(true); };
+  $('#btnAnsicht').onclick = ansichtWechseln;
+  $('#btnUebersicht').onclick = uebersichtZeigen;
+  $('#btnTanken').onclick = tankstellenSuchen;
   $('#btnLeanAn').onclick = leanAktivieren;
   $('#btnLeanKal').onclick = leanKalibrieren;
   $('#btnBackup').onclick = backupSpeichern;
@@ -2330,11 +2756,12 @@ async function init() {
     if (e) einst = einstAusDaten(e);
   } catch (e) { /* Standardwerte bleiben */ }
   themeAnwenden();
+  ansicht = einst.fahrAnsicht === 'navi' ? 'navi' : 'tacho';
   await datenLaden();
   planKarteInit(); fahrKarteInit();
   if (typeof L === 'undefined') toast('Karte konnte nicht geladen werden (offline?). Gespeicherte Fahrten sind trotzdem da.', 6000);
   $('#hinweisUnsicher').hidden = !!window.isSecureContext;
-  allesNeuZeichnen(); steuerungAnzeigen(); renderViaListe();
+  allesNeuZeichnen(); steuerungAnzeigen(); renderViaListe(); ansichtAnwenden();
   zeigeTab('planen');
   // Standard-Startort (z. B. Zuhause) automatisch als Start setzen
   const std = einst.startorte.find(o => o.id === einst.standardStart);
