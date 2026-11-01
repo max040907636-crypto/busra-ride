@@ -1,4 +1,4 @@
-# Kurvenbuch – Motorrad-App
+# Büsra Ride – Motorrad-App
 
 Eine Motorrad-App als **eine einzige HTML-Datei** (`index.html`) fürs Handy: Routen planen, Touren im Bergischen Land, Fahrten aufzeichnen, Top-Speed, geplante vs. echte Zeit, Garage und Notfall-Infos.
 

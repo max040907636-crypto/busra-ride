@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Kurvenbuch">
-<title>Kurvenbuch</title>
+<meta name="apple-mobile-web-app-title" content="Büsra Ride">
+<title>Büsra Ride</title>
 <!-- Leaflet (Karte) per CDN – wenn offline, läuft die App ohne Karte weiter -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
@@ -298,7 +298,7 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
 <header class="kopf">
   <div class="logo">
     <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#ffd400"/><path d="M8 30c6 0 6-9 12-9s5-11 12-11" fill="none" stroke="#12171c" stroke-width="4" stroke-linecap="round"/></svg>
-    <span>Kurvenbuch</span>
+    <span>Büsra Ride</span>
   </div>
   <button class="icon-btn notfall" id="btnNotfall" aria-label="Notfall-Infos anzeigen" title="Notfall-Infos">✚</button>
   <button class="icon-btn sperrbar" id="btnTheme" aria-label="Hell oder dunkel umschalten" title="Hell/Dunkel">
@@ -535,7 +535,7 @@ body.fahrsperre .sperrbar{pointer-events:none;opacity:.35}
 <script>
 'use strict';
 /* =====================================================================
-   KURVENBUCH – Motorrad-App in einer Datei
+   BÜSRA RIDE – Motorrad-App in einer Datei (früher „Kurvenbuch“)
    ---------------------------------------------------------------------
    Aufbau:
     1) Konstanten & Hilfsfunktionen
@@ -688,6 +688,7 @@ const Speicher = (() => {
       const ende = db => { if (fertig) return; fertig = true; if (!db) warnen(); res(db); };
       setTimeout(() => ende(null), 4000);
       try {
+        // Interner Name bleibt 'kurvenbuch', damit vorhandene Fahrten erhalten bleiben
         const rq = indexedDB.open('kurvenbuch', 1);
         rq.onupgradeneeded = () => {
           const db = rq.result;
@@ -1451,7 +1452,7 @@ async function tourBerechnen(id) {
 
 /* ===================== 8) GPX ===================== */
 function gpxKopf(name) {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Kurvenbuch" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${esc(name)}</name></metadata>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Büsra Ride" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${esc(name)}</name></metadata>\n`;
 }
 function gpxAusRoute(r) {
   const wpt = (r.waypoints || []).map((w, i) => `<wpt lat="${(+w.lat).toFixed(6)}" lon="${(+w.lon).toFixed(6)}"><name>${esc(w.name || 'Punkt ' + (i + 1))}</name></wpt>`).join('\n');
@@ -2419,7 +2420,7 @@ async function zeigeAuswertung(f) {
 }
 // Kurze Zusammenfassung teilen (bewusst ohne Top-Speed und ohne Standortdaten)
 async function fahrtTeilen(f) {
-  const text = `🏍️ ${f.name}\n${fmtKm(f.distance)} · ${fmtDauer(f.fahrMs)} Fahrzeit · Ø ${zahl(f.schnitt, 0)} km/h · ${zahl(f.hm, 0)} Hm${f.plan ? `\nRoute: ${f.plan.name}` : ''}\nAufgezeichnet mit Kurvenbuch`;
+  const text = `🏍️ ${f.name}\n${fmtKm(f.distance)} · ${fmtDauer(f.fahrMs)} Fahrzeit · Ø ${zahl(f.schnitt, 0)} km/h · ${zahl(f.hm, 0)} Hm${f.plan ? `\nRoute: ${f.plan.name}` : ''}\nAufgezeichnet mit Büsra Ride`;
   if (navigator.share) { try { await navigator.share({ title: f.name, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   try { await navigator.clipboard.writeText(text); toast('Text kopiert – jetzt z. B. in WhatsApp einfügen.'); }
   catch (e) { dialog({ titel: 'Fahrt teilen', html: `<textarea readonly rows="5">${esc(text)}</textarea>` }); }
@@ -2714,13 +2715,14 @@ async function leanKalibrieren() {
 
 // Backup (JSON) speichern / laden, alles löschen
 function backupSpeichern() {
+  // Kennung 'kurvenbuch' bleibt gleich, damit alte Backups weiter ladbar sind
   const daten = { app: 'kurvenbuch', version: 1, exportiert: new Date().toISOString(), routes: cache.routes, rides: cache.rides, bikes: cache.bikes, einstellungen: einst };
-  herunterladen(`kurvenbuch-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(daten), 'application/json');
+  herunterladen(`busra-ride-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(daten), 'application/json');
 }
 async function backupLaden(datei) {
   try {
     const d = JSON.parse(await dateiLesen(datei));
-    if (!d || d.app !== 'kurvenbuch') throw new Error('Das ist kein Kurvenbuch-Backup.');
+    if (!d || d.app !== 'kurvenbuch') throw new Error('Das ist kein Büsra-Ride-Backup.');
     if (!await frage('Backup laden?', 'Die Daten aus dem Backup werden zu deinen vorhandenen Daten hinzugefügt (gleiche Einträge werden überschrieben).', 'Laden')) return;
     for (const s of ['routes', 'rides', 'bikes']) for (const x of (Array.isArray(d[s]) ? d[s] : [])) if (x && x.id) await Speicher.setze(s, x);
     if (d.einstellungen) { einst = einstAusDaten(d.einstellungen); await einstSpeichern(); }
